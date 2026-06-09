@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from isaaclab.sensors import CameraData
-from pose_data_capture.utils import quaternion_utils as qutils
+from isaaclab_sensor_learning.utils import quaternion_utils as qutils
 import pprint as pp
 
 

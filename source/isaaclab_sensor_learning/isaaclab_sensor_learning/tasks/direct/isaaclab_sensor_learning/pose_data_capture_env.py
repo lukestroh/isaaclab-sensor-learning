@@ -16,9 +16,9 @@ from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiM
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import sample_uniform
 
-import pose_data_capture as pdc
-import pose_data_capture.utils.usd_utils as usd_utils
-import pose_data_capture.sensor.yaml_to_cfg as yaml_to_cfg
+import isaaclab_sensor_learning as pdc
+import isaaclab_sensor_learning.utils.usd_utils as usd_utils
+import isaaclab_sensor_learning.sensor.yaml_to_cfg as yaml_to_cfg
 from .pose_data_capture_env_cfg import PoseDataCaptureEnvCfg
 
 # from pose_data_capture.sensor.yaml_to_cfg import rig_yaml_to_sensor_cfgs

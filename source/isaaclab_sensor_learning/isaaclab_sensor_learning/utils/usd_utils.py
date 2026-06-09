@@ -4,7 +4,7 @@ import os
 import isaaclab.sim as sim_utils
 from isaaclab.sim.converters import UrdfConverter, UrdfConverterCfg
 
-from pose_data_capture import USD_DIR, URDF_DIR
+from isaaclab_sensor_learning import USD_DIR, URDF_DIR
 
 
 def load_usd(

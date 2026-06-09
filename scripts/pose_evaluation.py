@@ -30,13 +30,12 @@ from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.managers import SceneEntityCfg
 import isaaclab.sim as sim_utils
 from isaaclab.utils.math import subtract_frame_transforms
-from isaaclab_mimic.motion_planners.curobo import curobo_planner as crp
 from isaaclab_tasks.utils import parse_env_cfg
 
-from pose_data_capture.motion_planning import diff_ik as diff_ik_mp
-import pose_data_capture.tasks  # noqa: F401
-from pose_data_capture.utils import usd_utils
-from pose_data_capture.utils import quaternion_utils as qutils
+from isaaclab_sensor_learning.motion_planning import diff_ik as diff_ik_mp
+import isaaclab_sensor_learning.tasks  # noqa: F401
+from isaaclab_sensor_learning.utils import usd_utils
+from isaaclab_sensor_learning.utils import quaternion_utils as qutils
 
 import data_utils.data_logger as data_logger
 import data_utils.pose_generator as pose_generator
@@ -53,27 +52,22 @@ def main():
 
     # reset environment
     env.reset()
-
-    planner_cfg = crp.CuroboPlannerCfg.from_task_name(args_cli.task)
-
-
-    planner = crp.CuroboPlanner(
-        env=env,
-        robot=env.unwrapped.robot,
-        config=planner_cfg,
-    )
-
+    robot = env.unwrapped.robot
+    rmp_flow_ctlr = env.unwrapped.rmp_flow_controller
+    rmp_flow_ctlr.initialize(prim_paths_expr="/World/robot/**")
+    
+    target_pose = torch.tensor([[0, 0.6, 0.4, 0.707, -0.707, 0, 0]], device=env.unwrapped.device)
 
     # curr_goal_idx = 0
     # # Create buffers to store actions
     # ik_commands = torch.zeros(scene.num_envs, ik_controller.action_dim, device=robot.device)
     # ik_commands[:] = eef_goals[curr_goal_idx]
 
-    # # reset joint state
-    # joint_pos = robot.data.default_joint_pos.clone()
-    # joint_vel = robot.data.default_joint_vel.clone()
-    # robot.write_joint_state_to_sim(joint_pos, joint_vel)
-    # robot.reset()
+    # reset joint state
+    joint_pos = robot.data.default_joint_pos.clone()
+    joint_vel = robot.data.default_joint_vel.clone()
+    robot.write_joint_state_to_sim(joint_pos, joint_vel)
+    robot.reset()
     # ik_controller.reset()
     # env.unwrapped.sim.step()
 
@@ -81,6 +75,9 @@ def main():
     # # simulate environment
     while simulation_app.is_running():
         with torch.inference_mode():
+            rmp_flow_ctlr.set_command(target_pose)
+            res = rmp_flow_ctlr.compute()
+            print(res)
     #         print(f"Running IK to pose for goal index: {curr_goal_idx}")
     #         print(ik_commands)
 

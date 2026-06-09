@@ -7,15 +7,15 @@ from collections.abc import Sequence
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation, ArticulationCfg
-from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
+from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg, RmpFlowController
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import sample_uniform
 
-import pose_data_capture as pdc
-import pose_data_capture.utils.usd_utils as usd_utils
-import pose_data_capture.utils.quaternion_utils as qutils
+import isaaclab_sensor_learning as isl
+import isaaclab_sensor_learning.utils.usd_utils as usd_utils
+import isaaclab_sensor_learning.utils.quaternion_utils as qutils
 from .evaluation_env_cfg import PoseEvaluationEnvCfg
 
 import os
@@ -53,22 +53,25 @@ class PoseEvaluationEnv(DirectRLEnv):
         self.robot = Articulation(cfg=self.cfg.robot_cfg)
         self.scene.articulations["robot"] = self.robot
 
-        # # controllers
-        # self.ik_controller = DifferentialIKController(
-        #     cfg=DifferentialIKControllerCfg(
-        #         command_type="pose",
-        #         use_relative_mode=False,
-        #         ik_method="dls",
-        #         ik_params={"lambda_val": 0.01}
-        #     ),
-        #     num_envs=self.cfg.n_envs,
-        #     device=self.device,
-        # )
+        # controllers
+        self.ik_controller = DifferentialIKController(
+            cfg=DifferentialIKControllerCfg(
+                command_type="pose",
+                use_relative_mode=False,
+                ik_method="dls",
+                ik_params={"lambda_val": 0.01}
+            ),
+            num_envs=self.cfg.n_envs,
+            device=self.device,
+        )
 
-        # Index of fr3_link7 in the body list
-        # self.eef_body_idx = self.robot.find_bodies("fr3_link7")[0]
+        self.rmp_flow_controller = RmpFlowController(
+            cfg=self.cfg.rmp_flow_cfg,
+            device=self.device,
+        )
 
         # add sensors to robot. read rig data from h5 file and spawn cameras based on rig config
+
 
         return
 

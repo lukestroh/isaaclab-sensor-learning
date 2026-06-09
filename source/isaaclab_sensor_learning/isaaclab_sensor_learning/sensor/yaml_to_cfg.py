@@ -2,7 +2,8 @@
 from isaaclab.sensors import CameraCfg, MultiMeshRayCasterCameraCfg, OffsetCfg
 from isaaclab.sim.spawners.sensors import PinholeCameraCfg
 from pathlib import Path
-from pose_data_capture.sensor import camera_utils, lidar_utils
+from isaaclab_sensor_learning.sensor import camera_utils, lidar_utils
+from isaaclab_sensor_learning.utils import quaternion_utils as qutils
 from scipy.spatial.transform import Rotation as R
 
 import numpy as np
@@ -67,12 +68,12 @@ def rig_yaml_to_sensor_cfgs(rig_yaml_path: Path) -> dict[str, CameraCfg | MultiM
             ).as_quat()
             offset = OffsetCfg(
                 pos=offset_pos,
-                rot=[offset_rot[3], offset_rot[0], offset_rot[1], offset_rot[2]],
+                rot=qutils.xyzw_to_wxyz(offset_rot),
                 # convention="ros" # +Z forward, -Y up
             )
             offset.convention = "ros"
             sensor_cfgs[name] = CameraCfg(
-                prim_path=f"/World/envs/env_0/{name}",
+                prim_path=f"/World/envs/env_0/{name}", # TODO: need to handle multiple envs
                 width=depth_sensor_metadata["width"],
                 height=depth_sensor_metadata["height"],
                 data_types=["rgb", "depth", "normals", "semantic_segmentation", "instance_segmentation_fast"],
