@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="linear_slider">
+
+    <xacro:macro name="linear_slider_base" params="joint_limits tf_prefix parent *origin">
+        <!-- ================== -->
+        <!--     Properties     -->
+        <!-- ================== -->
+
+        <!-- Model properties -->
+        <xacro:property name="frame_mass" value="10.0"/>
+        <xacro:property name="frame_length" value="1.25"/>
+        <xacro:property name="frame_width" value="0.3"/>
+        <xacro:property name="frame_height" value="0.25"/>
+
+        <xacro:property name="moving_base_mass" value="10.0" />
+        <xacro:property name="base_link_mass" value="20.0" />
+
+        <!-- Model default position/orientation -->
+        <xacro:property name="model_scale" value="0.001 0.001 0.001"/>
+        <xacro:property name="base_link_start_orientation" value="0 0 0"/>
+        <xacro:property name="moving_base_start_orientation" value="0 0 0"/>
+        <xacro:property name="start_offset" value="0.0 0.0 0.0"/>
+
+        <!-- Prismatic joint properties -->
+        <xacro:property name="slider_limit_min" value="-0.4"/>
+        <xacro:property name="slider_limit_max" value="0.4"/>
+        <xacro:property name="slider_velocity_limit" value="0.25"/>
+        <xacro:property name="slider_effort_limit" value="2"/>
+
+        <!-- tool0 / flange properties -->
+        <xacro:property name="moving_base__flange_offset" value="0.05" />
+
+        <!-- Joint limits -->
+        <!-- Yaml file is dynamically built which xacro doesn't handle well, so key is split up and combined as raw string -->
+        <xacro:property name="prefix_part1" value="$"/> <!-- '$' character -->
+        <xacro:property name="prefix_part2" value="(var "/>
+        <xacro:property name="prefix_part3" value="linear_slider_tf_prefix"/>
+        <xacro:property name="prefix_part4" value=")"/>
+        <xacro:property name="joint_name" value="${prefix_part1}${prefix_part2}${prefix_part3}${prefix_part4}joint1"/>
+        <!-- <xacro:property name="joint_limits" value="${xacro.load_yaml(joint_limits_file)['joint_limits'][joint_name]}"/> -->
+        <!-- <xacro:property name="joint_limits" value="${xacro.load_yaml(joint_limits_file)}[${joint_name}]}" /> -->
+        <!-- <link name="${joint_limits}" /> -->
+
+        <xacro:property name="joint_limits_params" value="${joint_limits['joint_limits'][joint_name]}" />
+
+        <!-- ================== -->
+        <!--     Materials      -->
+        <!-- ================== -->
+        <material name="alpha_black">
+            <color rgba="0.6 0.6 0.6 1"/>
+        </material>
+        <material name="red_v">
+            <color rgba="1 0 0 1"/>
+        </material>
+
+        <!-- ================== -->
+        <!--       Links        -->
+        <!-- ================== -->
+        <!-- base_link -->
+        <link name="${tf_prefix}base_link">
+            <visual>
+                <material name="alpha_black"/>
+                <origin rpy="${base_link_start_orientation}" xyz="${start_offset}"/>
+                <geometry>
+                    <mesh filename="file://$(find linear_slider_description)/meshes/7thlink_fixed.STL" scale="${model_scale}" />
+                </geometry>
+            </visual>
+            <collision>
+                <origin rpy="0.0 0.0 0.0" xyz="-0.07 0.0 0.0"/>
+                <geometry>
+                    <box size="1.35 0.3 0.10"/>
+                    <!-- <mesh
+                        filename="package://linear_slider_description/meshes/7thlink_fixed.STL"
+                        scale="${model_scale}"
+                    /> -->
+                </geometry>
+            </collision>
+            <inertial>
+                <mass value="${base_link_mass}" />
+                <origin xyz="0.0 0.0 0.0" />
+                <inertia
+                    ixx="${1*12/(frame_mass + base_link_mass) * (frame_width**2 + frame_height**2)}"
+                    ixy="0.0"
+                    ixz="0.0"
+                    iyy="${1*12/(frame_mass + base_link_mass) * (frame_length**2 + frame_height**2)}"
+                    iyz="0.0"
+                    izz="${1*12/(frame_mass + base_link_mass) * (frame_width**2 + frame_length**2)}"
+                />
+            </inertial>
+        </link>
+        <gazebo reference="${tf_prefix}base_link">
+            <material>Gazebo/Gray</material>
+        </gazebo>
+        <!-- moving_base link -->
+        <link name="${tf_prefix}moving_base">
+            <visual>
+                <origin rpy="${moving_base_start_orientation}" xyz="${start_offset}" />
+                <material name="red_v" />
+                <geometry>
+                    <mesh
+                        filename="file://$(find linear_slider_description)/meshes/7thlink_move.STL"
+                        scale="${model_scale}"
+                    />
+                </geometry>
+            </visual>
+            <collision>
+                <origin rpy="0.0 0.0 0.0" xyz="0.0 -0.025 0.0" />
+                <geometry>
+                    <box size="0.22 0.220 0.118"/>
+                    <!-- <mesh
+                        filename="package://linear_slider_description/meshes/7thlink_move.STL"
+                        scale="${model_scale}"
+                    /> -->
+                </geometry>
+            </collision>
+            <inertial>
+                <mass value="${moving_base_mass}" />
+                <origin xyz="0.0 0.0 0.0" />
+                <inertia
+                    ixx="${1*12/(frame_mass + moving_base_mass) * (frame_width**2 + frame_height**2)}"
+                    ixy="0.0"
+                    ixz="0.0"
+                    iyy="${1*12/(frame_mass + moving_base_mass) * (frame_length**2 + frame_height**2)}"
+                    iyz="0.0"
+                    izz="${1*12/(frame_mass + moving_base_mass) * (frame_width**2 + frame_length**2)}"
+                />
+            </inertial>
+        </link>
+        <gazebo reference="${tf_prefix}moving_base">
+            <material>Gazebo/Red</material>
+        </gazebo>
+
+        <!-- tool link -->
+        <link name="${tf_prefix}tool0" />
+        <link name="${tf_prefix}base" />
+        <!-- Frame for mounting EEF models to a manipulator. x+ axis points forward (REP 103). -->
+        <link name="${tf_prefix}flange" />
+
+
+        <!-- ================== -->
+        <!--       Joints       -->
+        <!-- ================== -->
+        <!-- base_joint fixes base_link to the environment -->
+        <joint name="${tf_prefix}base_joint" type="fixed">
+            <parent link="${parent}"/>
+            <child link="${tf_prefix}base"/>
+            <xacro:insert_block name="origin"/>
+        </joint>
+        <joint name="${tf_prefix}base_link--base_joint" type="fixed">
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <parent link="${tf_prefix}base" />
+            <child link="${tf_prefix}base_link" />
+        </joint>
+        <!-- joint1, moving prismatic joint -->
+        
+        <joint name="${tf_prefix}joint1" type="prismatic">
+            <parent link="${tf_prefix}base_link"/>
+            <child link="${tf_prefix}moving_base"/>
+            <axis xyz="1 0 0"/>
+            <limit
+                lower="${joint_limits_params['min_position']}"
+                upper="${joint_limits_params['max_position']}"
+                velocity="${joint_limits_params['max_velocity']}"
+                effort="${joint_limits_params['max_acceleration']}" />
+            <!-- effort is attribute for enforcing maximum joint effort, between 0 and 100% -->
+            <origin xyz="0 0 0" rpy="0 0 0"/> <!-- Define where the joint will be located, defined in terms of parent's reference frame -->
+        </joint>
+
+
+        <!-- Extra joints for ros-industrial standard compatability -->
+        <!-- tool frame to fixed frame -->
+        <joint name="${tf_prefix}moving_base--flange_joint" type="fixed">
+            <parent link="${tf_prefix}moving_base"/>
+            <child link="${tf_prefix}flange"/>
+            <origin xyz="0 0 ${moving_base__flange_offset}" rpy="0 0 0" />
+        </joint>
+        <joint name="${tf_prefix}flange--tool0_joint" type="fixed">
+            <parent link="${tf_prefix}flange" />
+            <child link="${tf_prefix}tool0" />
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+        </joint>
+
+    </xacro:macro>
+</robot>

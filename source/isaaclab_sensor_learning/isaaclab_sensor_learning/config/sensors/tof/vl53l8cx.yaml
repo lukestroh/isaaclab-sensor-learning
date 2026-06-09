@@ -1,0 +1,25 @@
+model: "vl53l8cx"
+sensor_type: "tof"
+data_type: "depth"
+mass: 0.0007 # kg
+dimensions:
+    shape: box
+    x: 0.0127
+    y: 0.02286
+    z: 0.00254
+depth:
+    dfov: 65.0
+    z_near: 0.03
+    z_far: 3.4
+    width: 8
+    height: 8
+    sensing_unit_offset:
+        x: 0.0001
+        y: -0.001695
+        z: 0.002776
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0
+data_rate_hz: 15
+upsample: True # upsample the image to deal with low-resolution and avoid color smearing from render.
+upsample_factor: 30.5

@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="https://ros.org/wiki/xacro" name="linear_slider">
+
+    <!-- World link -->
+    <link name="world" />
+
+    <!-- linear slider -->
+    <xacro:include filename="$(find linear_slider_description)/urdf/linear_slider_macro.urdf.xacro" />
+
+    <xacro:arg name="parent" default="world" />
+    <xacro:arg name="linear_slider_tf_prefix" default="''" />
+    <xacro:arg name="use_mock_hardware" default="false" />
+    <xacro:arg name="mock_sensor_commands" default="false" />
+    <xacro:arg name="sim_gazebo" default="false" />
+    <xacro:arg name="sim_gazebo_classic" default="false"/>
+
+    <xacro:linear_slider_macro
+        parent="$(arg parent)"
+        linear_slider_tf_prefix="$(arg linear_slider_tf_prefix)"
+        sim_gazebo="$(arg sim_gazebo)"
+        sim_gazebo_classic="$(arg sim_gazebo_classic)"
+        use_mock_hardware="$(arg use_mock_hardware)"
+        mock_sensor_commands="$(arg mock_sensor_commands)"
+    />
+
+</robot>    

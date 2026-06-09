@@ -1,0 +1,55 @@
+#usda 1.0
+(
+    defaultPrim = "fr3"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "fr3" (
+    variants = {
+        string Physics = "PhysX"
+        string Robot = "Robot"
+        string Sensor = "Sensors"
+    }
+    prepend variantSets = ["Physics", "Sensor", "Robot"]
+)
+{
+    variantSet "Physics" = {
+        "None" (
+            prepend references = @configuration/fr3_base.usd@
+        ) {
+            over "joints" (
+                active = false
+            )
+            {
+            }
+
+        }
+        "PhysX" (
+            prepend payload = @configuration/fr3_physics.usd@
+        ) {
+
+        }
+    }
+    variantSet "Sensor" = {
+        "None" {
+
+        }
+        "Sensors" (
+            prepend payload = @configuration/fr3_sensor.usd@
+        ) {
+
+        }
+    }
+    variantSet "Robot" = {
+        "None" {
+
+        }
+        "Robot" (
+            prepend payload = @configuration/fr3_robot.usd@
+        ) {
+
+        }
+    }
+}
+

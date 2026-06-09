@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="linear_slider">
+    <xacro:macro name="linear_slider_macro" params="
+        parent
+        linear_slider_tf_prefix
+        use_mock_hardware:=^|false
+        mock_sensor_commands:=^|false
+        sim_gazebo:=^|false
+        sim_gazebo_classic:=^|false
+        ">
+
+        <xacro:if value="$(eval '${linear_slider_tf_prefix}' != '')" >
+            <xacro:property name="tf_prefix" value="${linear_slider_tf_prefix}__"/>
+        </xacro:if>
+        <xacro:unless value="$(eval '${linear_slider_tf_prefix}' != '')" >
+            <xacro:property name="tf_prefix" value="''" />
+        </xacro:unless>
+
+        <!-- Robot description -->
+        <xacro:include filename="$(find linear_slider_description)/urdf/linear_slider_base.xacro"/>
+        <xacro:include filename="$(find linear_slider_description)/urdf/linear_slider.ros2_control.xacro"/>
+
+        <!-- YAML file parameters -->
+        <xacro:arg name="initial_state_file" default="$(find linear_slider_description)/config/initial_state.yaml" />
+        <xacro:arg name="joint_limits_file" default="$(find linear_slider_description)/config/joint_limits.yaml" />
+
+        <!-- convert to property to use substitution in function -->
+        <xacro:property name="initial_state_file" value="$(arg initial_state_file)"/>
+        <xacro:property name="joint_limits_file" value="$(arg joint_limits_file)" />
+
+        <!-- Macro information -->
+        <xacro:linear_slider_base
+            joint_limits="${xacro.load_yaml(joint_limits_file)}"
+            tf_prefix="${tf_prefix}"
+            parent="${parent}">
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+        </xacro:linear_slider_base>
+
+        <!-- ros2_control -->
+        <xacro:linear_slider_ros2_control
+            name="linear_slider_ros2_control"
+            tf_prefix="${tf_prefix}"
+            initial_state="${xacro.load_yaml(initial_state_file)}"
+            sim_gazebo="${sim_gazebo}"
+            sim_gazebo_classic="${sim_gazebo_classic}"
+            use_mock_hardware="${use_mock_hardware}"
+            mock_sensor_commands="${mock_sensor_commands}"
+        />
+
+        <xacro:if value="${sim_gazebo_classic}">
+            <!-- ================== -->
+            <!--   Gazebo Classic   -->
+            <!-- ================== -->
+            <gazebo reference="${tf_prefix}base_link">
+                <static>true</static>
+            </gazebo>
+            <gazebo>
+                <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+                    <robot_param>robot_description</robot_param>
+                    <robot_param_node>robot_state_publisher</robot_param_node>
+                    <parameters>$(find linear_slider_controllers)/config/linear_slider_controllers.yaml</parameters>
+                </plugin>
+                <sensor name="${tf_prefix}lim_switch_neg">
+                    <always_on>1</always_on>
+                </sensor>
+                <sensor name="${tf_prefix}lim_switch_pos">
+                    <always_on>1</always_on>
+                </sensor>
+            </gazebo>
+        </xacro:if>
+
+        <xacro:if value="${sim_gazebo}">
+            <!-- ================== -->
+            <!--  Gazebo Ignition   -->
+            <!-- ================== -->
+            <gazebo reference="world"/>
+            <gazebo>
+                <plugin filename="libign_ros2_control-system.so" name="ign_ros2_control::IgnitionROS2ControlPlugin">
+                    <parameters>$(find linear_slider_controllers)/config/linear_slider_controllers.yaml</parameters>
+                    <controller_manager_node_name>${tf_prefix}controller_manager</controller_manager_node_name>
+                </plugin>
+            </gazebo>
+        </xacro:if>
+    </xacro:macro>
+</robot>
