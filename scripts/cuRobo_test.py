@@ -83,7 +83,6 @@ def main():
 
             actions = torch.zeros((env_cfg.n_envs, env_cfg.action_space), device=env.unwrapped.device)  # dummy actions
             observations, rewards, terminated, truncated, info = env.step(actions)
-            
 
     return
 

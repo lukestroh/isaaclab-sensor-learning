@@ -123,7 +123,7 @@ def run_ik_to_pose(
     eef_marker=None,
     goal_marker=None,
 ):
-    ik_controller.reset()
+    
     ik_controller.set_command(torch.cat([goal_pos_b, goal_quat_b], dim=-1))
 
     for _ in range(num_steps):

@@ -6,8 +6,9 @@ import torch
 
 from isaaclab_sensor_learning import URDF_DIR
 
-
-_RMP_CONFIG_DIR = "/workspace/src/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/motion_planning"
+_RMP_CONFIG_DIR = (
+    "/workspace/src/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/motion_planning"
+)
 
 
 FR3_RMPFLOW_CFG = RmpFlowControllerCfg(
@@ -20,10 +21,10 @@ FR3_RMPFLOW_CFG = RmpFlowControllerCfg(
 
 
 def interpolate_cartesian_path(
-    start_pos: torch.Tensor,      # (3,)
-    start_quat: torch.Tensor,     # (4,) wxyz
-    end_pos: torch.Tensor,        # (3,)
-    end_quat: torch.Tensor,       # (4,) wxyz
+    start_pos: torch.Tensor,  # (3,)
+    start_quat: torch.Tensor,  # (4,) wxyz
+    end_pos: torch.Tensor,  # (3,)
+    end_quat: torch.Tensor,  # (4,) wxyz
     n_waypoints: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Returns (positions, quaternions) each of shape (n_waypoints, 3/4)"""

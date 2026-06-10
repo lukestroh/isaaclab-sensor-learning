@@ -25,14 +25,14 @@ import gymnasium as gym
 import torch
 import numpy as np
 
-from isaaclab.markers import VisualizationMarkers
-from isaaclab.markers.config import FRAME_MARKER_CFG
-from isaaclab.managers import SceneEntityCfg
-import isaaclab.sim as sim_utils
-from isaaclab.utils.math import subtract_frame_transforms
+# from isaaclab.markers import VisualizationMarkers
+# from isaaclab.markers.config import FRAME_MARKER_CFG
+# from isaaclab.managers import SceneEntityCfg
+# import isaaclab.sim as sim_utils
+import isaaclab.utils.math as math_utils
 from isaaclab_tasks.utils import parse_env_cfg
 
-from isaaclab_sensor_learning.motion_planning import diff_ik as diff_ik_mp
+# from isaaclab_sensor_learning.motion_planning import diff_ik as diff_ik_mp
 import isaaclab_sensor_learning.tasks  # noqa: F401
 from isaaclab_sensor_learning.utils import usd_utils
 from isaaclab_sensor_learning.utils import quaternion_utils as qutils
@@ -41,6 +41,8 @@ import data_utils.data_logger as data_logger
 import data_utils.pose_generator as pose_generator
 import pprint as pp
 import os
+
+import time
 
 
 def main():
@@ -53,48 +55,93 @@ def main():
     # reset environment
     env.reset()
     robot = env.unwrapped.robot
-    ik_controller = env.unwrapped.ik_controller
-    
-    target_pose = torch.tensor([[0, 0.6, 0.4, 0.707, -0.707, 0, 0]], device=env.unwrapped.device)
+    # ik_controller = env.unwrapped.ik_controller
+    # ik_controller.reset()
+
+
+
+# rmp_flow_controller = env.unwrapped.rmp_flow_controller
+    # rmp_flow_controller.initialize(prim_paths_expr="/World/envs/env_.*/robot")
+
+    def get_tf(source_frame, target_frame, pose, quat):
+        if source_frame == target_frame:
+            return torch.cat([pose, quat], dim=-1)
+        source_pos, source_quat = pose, quat
+        print(f"Source pos: {source_pos}, source quat: {source_quat}")
+        
+        target_pos, target_quat = (
+            robot.data.body_pos_w[:, robot.find_bodies(target_frame)[0]],
+            robot.data.body_quat_w[:, robot.find_bodies(target_frame)[0]],
+        )
+        print(f"Target pos: {target_pos}, target quat: {target_quat}")
+        relative_tf = math_utils.subtract_frame_transforms(source_pos, source_quat, target_pos, target_quat)
+        return relative_tf
+
+    robot_base_pos = robot.data.body_pos_w[:, robot.find_bodies("fr3_link1")[0]]
+    robot_base_quat = robot.data.body_quat_w[:, robot.find_bodies("fr3_link1")[0]]
+
+    target_pos = torch.tensor([[0, 0.5, 0.5]], device=env.unwrapped.device)
+    target_quat = torch.tensor([[1, 0, 0, 0]], device=env.unwrapped.device)  # wxyz
+
+    target_pos_b, target_quat_b = get_tf(
+        "world", "fr3_link1", target_pos[torch.newaxis, :], target_quat[torch.newaxis, :]
+    )
 
     # curr_goal_idx = 0
     # # Create buffers to store actions
     # ik_commands = torch.zeros(scene.num_envs, ik_controller.action_dim, device=robot.device)
     # ik_commands[:] = eef_goals[curr_goal_idx]
 
-    # reset joint state
-    joint_pos = robot.data.default_joint_pos.clone()
-    joint_vel = robot.data.default_joint_vel.clone()
-    robot.write_joint_state_to_sim(joint_pos, joint_vel)
+    # # reset joint state
+    # joint_pos = robot.data.default_joint_pos.clone()
+    # joint_vel = robot.data.default_joint_vel.clone()
+    # robot.write_joint_state_to_sim(joint_pos, joint_vel)
     robot.reset()
-    ik_controller.reset()
-    env.unwrapped.sim.step()
+    # ik_controller.reset()
+    # env.unwrapped.sim.step()
+
+    # if not args_cli.headless:
+    # time.sleep(10)
 
     # count = 0
     # # simulate environment
     while simulation_app.is_running():
         with torch.inference_mode():
 
-    #         print(f"Running IK to pose for goal index: {curr_goal_idx}")
-    #         print(ik_commands)
+            # robot.set_joint_velocity_target(vel_target)
 
-    #         mp.run_ik_to_pose(
-    #             robot=robot,
-    #             ik_controller=ik_controller,
-    #             robot_entity_cfg=robot_entity_cfg,
-    #             ee_jacobi_idx=ee_jacobi_idx,
-    #             scene=scene,
-    #             sim=env.unwrapped.sim,
-    #             goal_pos_w=ik_commands[:, 0:3],
-    #             goal_quat_w=ik_commands[:, 3:7],
-    #             num_steps=1000,
-    #             eef_marker=eef_marker,
-    #             goal_marker=goal_marker,
-    #         )
+            #         print(f"Running IK to pose for goal index: {curr_goal_idx}")
+            #         print(ik_commands)
 
-            actions = torch.zeros((env_cfg.n_envs, env_cfg.action_space), device=env.unwrapped.device)  # dummy actions
+            #         mp.run_ik_to_pose(
+            #             robot=robot,
+            #             ik_controller=ik_controller,
+            #             robot_entity_cfg=robot_entity_cfg,
+            #             ee_jacobi_idx=ee_jacobi_idx,
+            #             scene=scene,
+            #             sim=env.unwrapped.sim,
+            #             goal_pos_w=ik_commands[:, 0:3],
+            #             goal_quat_w=ik_commands[:, 3:7],
+            #             num_steps=1000,
+            #             eef_marker=eef_marker,
+            #             goal_marker=goal_marker,
+            #         )
+
+            # rmp_flow_controller.set_command(command=actions)
+            # pos_target, vel_target = rmp_flow_controller.compute()
+            # # print(f"RMP flow controller output: {res}")
+
+            # robot.set_joint_position_target(pos_target)
+            # robot.write_data_to_sim()
+            # # env.unwrapped.sim.step()
+            # robot.update(env.unwrapped.sim.get_physics_dt())
+
+            print(robot.data.body_pos_w[:, robot.find_bodies("fr3_link8")[0]])
+            print(robot.data.body_quat_w[:, robot.find_bodies("fr3_link8")[0]])
+
+            actions = torch.cat([target_pos_b, target_quat_b], dim=-1)
+            actions = torch.tensor([[0.0, 0.5, 0.6, 1.0, 0.0, 0.0, 0.0]], device=env.unwrapped.device)
             observations, rewards, terminated, truncated, info = env.step(actions)
-            
 
     return
 

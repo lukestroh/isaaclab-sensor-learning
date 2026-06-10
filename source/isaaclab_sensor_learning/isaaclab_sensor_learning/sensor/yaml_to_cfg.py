@@ -73,7 +73,7 @@ def rig_yaml_to_sensor_cfgs(rig_yaml_path: Path) -> dict[str, CameraCfg | MultiM
             )
             offset.convention = "ros"
             sensor_cfgs[name] = CameraCfg(
-                prim_path=f"/World/envs/env_0/{name}", # TODO: need to handle multiple envs
+                prim_path=f"/World/envs/env_0/{name}",  # TODO: need to handle multiple envs
                 width=depth_sensor_metadata["width"],
                 height=depth_sensor_metadata["height"],
                 data_types=["rgb", "depth", "normals", "semantic_segmentation", "instance_segmentation_fast"],

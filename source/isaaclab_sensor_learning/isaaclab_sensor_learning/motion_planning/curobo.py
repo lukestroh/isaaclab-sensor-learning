@@ -12,8 +12,11 @@ import torch
 from typing import List, Optional
 from pathlib import Path
 
+
 def get_motion_planner():
-    motion_planner_cfg = MotionPlannerCfg(robot="/workspace/src/isaaclab-pose-data-capture/source/pose_data_capture/pose_data_capture/config/curobo/fr3.yml")
+    motion_planner_cfg = MotionPlannerCfg(
+        robot="/workspace/src/isaaclab-pose-data-capture/source/pose_data_capture/pose_data_capture/config/curobo/fr3.yml"
+    )
     planner = MotionPlanner(motion_planner_cfg)
     planner.warmup()
     return planner
@@ -53,7 +56,11 @@ def _plot_trajectory(
         for idx, label in zip(phase_boundaries, phase_labels):
             ax.axvline(x=idx * dt, color="grey", linestyle="--", linewidth=0.8)
             ax.text(
-                idx * dt, ax.get_ylim()[1], f" {label}", fontsize=8, va="top",
+                idx * dt,
+                ax.get_ylim()[1],
+                f" {label}",
+                fontsize=8,
+                va="top",
             )
 
     ax.set_xlabel("Time (s)")
@@ -101,5 +108,5 @@ def plan_path(planner, start_joint_state, goal_joint_state, output_dir: Optional
     else:
         print("✗ Planning failed - try adjusting the goal or obstacles")
         return False
-    
+
     # return trajectory

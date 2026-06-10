@@ -57,11 +57,7 @@ def generate_usd_from_urdf(
     usd_file_name = os.path.splitext(os.path.basename(urdf_path))[0]
     usd_dir = os.path.join(USD_DIR, "fr3")
 
-
-    pd_gains_cfg = UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
-        stiffness=400.0,
-        damping=80.0
-    )
+    pd_gains_cfg = UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=400.0, damping=80.0)
 
     joint_drive_cfg = UrdfConverterCfg.JointDriveCfg(
         gains=pd_gains_cfg,
@@ -79,9 +75,7 @@ def generate_usd_from_urdf(
         self_collision=True,
     )
 
-    usd_converter = UrdfConverter(
-        cfg=usd_cvrtr_cfg
-    )
+    usd_converter = UrdfConverter(cfg=usd_cvrtr_cfg)
 
     print(usd_converter)
 
