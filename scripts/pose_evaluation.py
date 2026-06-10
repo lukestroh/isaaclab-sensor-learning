@@ -53,8 +53,7 @@ def main():
     # reset environment
     env.reset()
     robot = env.unwrapped.robot
-    rmp_flow_ctlr = env.unwrapped.rmp_flow_controller
-    rmp_flow_ctlr.initialize(prim_paths_expr="/World/robot/**")
+    ik_controller = env.unwrapped.ik_controller
     
     target_pose = torch.tensor([[0, 0.6, 0.4, 0.707, -0.707, 0, 0]], device=env.unwrapped.device)
 
@@ -68,16 +67,14 @@ def main():
     joint_vel = robot.data.default_joint_vel.clone()
     robot.write_joint_state_to_sim(joint_pos, joint_vel)
     robot.reset()
-    # ik_controller.reset()
-    # env.unwrapped.sim.step()
+    ik_controller.reset()
+    env.unwrapped.sim.step()
 
     # count = 0
     # # simulate environment
     while simulation_app.is_running():
         with torch.inference_mode():
-            rmp_flow_ctlr.set_command(target_pose)
-            res = rmp_flow_ctlr.compute()
-            print(res)
+
     #         print(f"Running IK to pose for goal index: {curr_goal_idx}")
     #         print(ik_commands)
 

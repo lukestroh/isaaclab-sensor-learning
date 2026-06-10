@@ -43,8 +43,7 @@ class PoseEvaluationEnvCfg(DirectRLEnvCfg):
     # robot
     robot_cfg: ArticulationCfg = FRANKA_FR3_CFG.replace(prim_path="/World/robot")
 
-    # controllers
-    rmp_flow_cfg = FR3_RMPFLOW_CFG
+
 
     # sensors: NOTE: offsetconfigs for sensors are from the parent prim. this needs to be combined with internal sensor receiver offset defined in the sensor yaml.
 
