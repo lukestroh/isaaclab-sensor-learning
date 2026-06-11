@@ -49,6 +49,24 @@ def generate_usd_from_urdf(
         "eef": None,
         "use_prismatic_axis": True,
     },
+    stiffness: dict = {
+        "fr3_joint1": 600.0,
+        "fr3_joint2": 600.0,
+        "fr3_joint3": 600.0,
+        "fr3_joint4": 600.0,
+        "fr3_joint5": 250.0,
+        "fr3_joint6": 150.0,
+        "fr3_joint7": 50.0,
+    },
+    damping: dict = {
+        "fr3_joint1": 30.0,
+        "fr3_joint2": 30.0,
+        "fr3_joint3": 30.0,
+        "fr3_joint4": 30.0,
+        "fr3_joint5": 10.0,
+        "fr3_joint6": 10.0,
+        "fr3_joint7": 5.0,
+    },
 ) -> None:
     """
     Generate a USD file from a URDF file using the `usd_from_urdf` function from `isaaclab.sim.utils`.
@@ -57,7 +75,7 @@ def generate_usd_from_urdf(
     usd_file_name = os.path.splitext(os.path.basename(urdf_path))[0]
     usd_dir = os.path.join(USD_DIR, "fr3")
 
-    pd_gains_cfg = UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=400.0, damping=80.0)
+    pd_gains_cfg = UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=stiffness, damping=damping)
 
     joint_drive_cfg = UrdfConverterCfg.JointDriveCfg(
         gains=pd_gains_cfg,

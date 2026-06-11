@@ -11,10 +11,14 @@ from isaaclab.utils import configclass
 from isaaclab_sensor_learning.robot.franka_cfg import FRANKA_FR3_CFG
 # from isaaclab_sensor_learning.motion_planning.rmp_flow import FR3_RMPFLOW_CFG
 
-# from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
+from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
+from isaaclab_assets.robots.universal_robots import UR10e_CFG
 
 
-from pathlib import Path
+# from pathlib import Path
+
+# from isaaclab_assets import FRANKA_PANDA_HIGH_PD_CFG
+
 
 
 @configclass
@@ -42,7 +46,9 @@ class PoseEvaluationEnvCfg(DirectRLEnvCfg):
     )
 
     # robot
-    robot_cfg: ArticulationCfg = FRANKA_FR3_CFG.replace(prim_path="/World/envs/env_.*/robot")
+    # robot_cfg: ArticulationCfg = FRANKA_FR3_CFG.copy().replace(prim_path="/World/envs/env_.*/robot")
+    # robot_cfg: ArticulationCfg = FRANKA_PANDA_HIGH_PD_CFG.copy().replace(prim_path="/World/envs/env_.*/robot")
+    robot_cfg: ArticulationCfg = UR10e_CFG.copy().replace(prim_path="/World/envs/env_.*/robot")
 
     # rmp_flow_cfg = FR3_RMPFLOW_CFG
 

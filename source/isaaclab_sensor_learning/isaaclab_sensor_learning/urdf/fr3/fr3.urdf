@@ -315,7 +315,15 @@
     <position_based_velocity_limits deceleration_limit="17.0" velocity_offset="0.4592"/>
     <dynamics D="1" K="7000" damping="0.003" friction="0.2" gear_ratio="80.0" motor_inertia="3.211626e-05" mu_coulomb="0" mu_viscous="16"/>
   </joint>
-  <link name="fr3_link8"/>
+  <link name="fr3_link8">
+    <inertial>
+      <mass value="0.001"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.00001" ixy="0.0" ixz="0.0"
+              iyy="0.00001" iyz="0.0"
+              izz="0.00001"/>
+    </inertial>
+  </link>
   <joint name="fr3_joint8" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0.107"/>
     <parent link="fr3_link7"/>

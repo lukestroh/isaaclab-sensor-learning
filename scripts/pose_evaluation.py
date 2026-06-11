@@ -9,6 +9,8 @@ parser.add_argument(
 )
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default="Template-Pose-Evaluation-Direct-v0", help="Name of the task.")
+parser.add_argument("--allow-root", action="store_true", default=True, help="Allow running as root user (not recommended).")
+parser.add_argument("--robot", type=str, default="ur10e", help="Name of the robot to use in the evaluation.", choices=["fr3", "ur10e", "panda"])
 # parser.add_argument("--enable_cameras", action="store_true", default=True, help="Enable cameras in the environment.")
 
 # append AppLauncher cli args
@@ -77,15 +79,15 @@ def main():
         relative_tf = math_utils.subtract_frame_transforms(source_pos, source_quat, target_pos, target_quat)
         return relative_tf
 
-    robot_base_pos = robot.data.body_pos_w[:, robot.find_bodies("fr3_link1")[0]]
-    robot_base_quat = robot.data.body_quat_w[:, robot.find_bodies("fr3_link1")[0]]
+    # robot_base_pos = robot.data.body_pos_w[:, robot.find_bodies("fr3_link1")[0]]
+    # robot_base_quat = robot.data.body_quat_w[:, robot.find_bodies("fr3_link1")[0]]
 
-    target_pos = torch.tensor([[0, 0.5, 0.5]], device=env.unwrapped.device)
-    target_quat = torch.tensor([[1, 0, 0, 0]], device=env.unwrapped.device)  # wxyz
+    target_pos = torch.tensor([[0.5, 0.5, 0.7]], device=env.unwrapped.device)
+    target_quat = torch.tensor([[0.707, 0, 0.707, 0]], device=env.unwrapped.device)  # wxyz
 
-    target_pos_b, target_quat_b = get_tf(
-        "world", "fr3_link1", target_pos[torch.newaxis, :], target_quat[torch.newaxis, :]
-    )
+    # target_pos_b, target_quat_b = get_tf(
+    #     "world", "fr3_link1", target_pos[torch.newaxis, :], target_quat[torch.newaxis, :]
+    # )
 
     # curr_goal_idx = 0
     # # Create buffers to store actions
@@ -99,6 +101,12 @@ def main():
     robot.reset()
     # ik_controller.reset()
     # env.unwrapped.sim.step()
+
+    eef_goals = [
+        [0.5, 0.5, 0.7, 0.707, 0, 0.707, 0],
+        [0.5, -0.4, 0.6, 0.707, 0.707, 0.0, 0.0],
+        [0.5, 0, 0.5, 0.0, 1.0, 0.0, 0.0],
+    ]
 
     # if not args_cli.headless:
     # time.sleep(10)
@@ -136,10 +144,10 @@ def main():
             # # env.unwrapped.sim.step()
             # robot.update(env.unwrapped.sim.get_physics_dt())
 
-            print(robot.data.body_pos_w[:, robot.find_bodies("fr3_link8")[0]])
-            print(robot.data.body_quat_w[:, robot.find_bodies("fr3_link8")[0]])
+            print(robot.data.body_pos_w[:, robot.find_bodies("wrist_3_link")[0]])
+            print(robot.data.body_quat_w[:, robot.find_bodies("wrist_3_link")[0]])
 
-            actions = torch.cat([target_pos_b, target_quat_b], dim=-1)
+            actions = torch.cat([target_pos, target_quat], dim=-1)
             actions = torch.tensor([[0.0, 0.5, 0.6, 1.0, 0.0, 0.0, 0.0]], device=env.unwrapped.device)
             observations, rewards, terminated, truncated, info = env.step(actions)
 

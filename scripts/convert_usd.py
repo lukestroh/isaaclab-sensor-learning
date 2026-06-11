@@ -25,9 +25,9 @@ import gymnasium as gym
 import torch
 from isaaclab_tasks.utils import parse_env_cfg
 
-from pose_data_capture.robot import motion_planning as mp
-import pose_data_capture.tasks  # noqa: F401
-from pose_data_capture.utils import usd_utils
+# from pose_data_capture.robot import motion_planning as mp
+import isaaclab_sensor_learning.tasks  # noqa: F401
+from isaaclab_sensor_learning.utils import usd_utils
 
 import os
 
@@ -54,7 +54,7 @@ def main():
     while simulation_app.is_running():
         with torch.inference_mode():
 
-            ...
+            break
 
     return
 

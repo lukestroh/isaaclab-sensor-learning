@@ -32,7 +32,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.utils.math import subtract_frame_transforms
 from isaaclab_tasks.utils import parse_env_cfg
 
-from pose_data_capture.robot import motion_planning as mp
+# from pose_data_capture.robot import motion_planning as mp
 import pose_data_capture.tasks  # noqa: F401
 from pose_data_capture.utils import usd_utils
 from pose_data_capture.utils import quaternion_utils as qutils

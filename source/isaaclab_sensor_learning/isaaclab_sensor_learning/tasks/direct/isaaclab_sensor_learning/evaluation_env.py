@@ -10,6 +10,8 @@ from isaaclab.assets import Articulation
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.markers import VisualizationMarkers
+from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import subtract_frame_transforms
@@ -30,12 +32,19 @@ class PoseEvaluationEnv(DirectRLEnv):
 
         self.sensors = {}
         self._prims_removed = False
+        self._new_action = False
         super().__init__(cfg, render_mode, **kwargs)
 
+        # self.robot_entity_cfg = SceneEntityCfg(
+        #     name="robot",
+        #     joint_names=["fr3_joint.*"],
+        #     body_names=["fr3_link8"],
+        # )
+        # self.robot_entity_cfg = SceneEntityCfg("robot", joint_names=["panda_joint.*"], body_names=["panda_hand"])
         self.robot_entity_cfg = SceneEntityCfg(
             name="robot",
-            joint_names=["fr3_joint.*"],
-            body_names=["fr3_link8"],
+            joint_names=[".*"],
+            body_names=["wrist_3_link"]
         )
         self.robot_entity_cfg.resolve(self.scene)
 
@@ -53,14 +62,6 @@ class PoseEvaluationEnv(DirectRLEnv):
         # self.cfg.tree_usd_path = os.path.join(pdc.PKG_DIR, "trees/models", "lpy_envy_00000_uv.usda")
         # self.curr_tree_mesh_prim = usd_utils.load_usd(usd_path=self.cfg.tree_usd_path, name="lpy_envy_00000", env=0)
 
-        # robot
-        # self.robot = Articulation(
-        #     cfg=self.cfg.robot_cfg.replace(
-        #         init_state=ArticulationCfg.InitialStateCfg(
-        #             pos=(0.0, 1.0, 0.0), rot=tuple(qutils.xyzw_to_wxyz(np.asarray([0.0, 0.0, 0.0, 1.0])))
-        #         )
-        #     )
-        # )
         self.cfg.robot_cfg.init_state.pos = (0.0, 0.0, 0.0)
         self.cfg.robot_cfg.init_state.rot = tuple(qutils.xyzw_to_wxyz(np.asarray([0.0, 0.0, 0.0, 1.0])))
         self.robot = Articulation(cfg=self.cfg.robot_cfg)
@@ -69,20 +70,19 @@ class PoseEvaluationEnv(DirectRLEnv):
         # controllers
         self.ik_controller = DifferentialIKController(
             cfg=DifferentialIKControllerCfg(
-                command_type="pose", use_relative_mode=False, ik_method="dls", ik_params={"lambda_val": 0.01}
+                command_type="pose", use_relative_mode=False, ik_method="dls", ik_params={"lambda_val": 0.0001}
             ),
             num_envs=self.cfg.n_envs,
             device=self.device,
         )
         self.ik_controller.reset()
+        self.actions = torch.zeros((self.cfg.n_envs, self.ik_controller.action_dim), device=self.device)  # (N, 7) target pose in world frame
 
-        
-        
-
-        # self.rmp_flow_controller = RmpFlowController(
-        #     cfg=self.cfg.rmp_flow_cfg,
-        #     device=self.device,
-        # )
+        # Markers
+        frame_marker_cfg = FRAME_MARKER_CFG.copy()
+        frame_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
+        self.eef_markers = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_current"))
+        self.goal_markers = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_goal"))
 
         # add sensors to robot. read rig data from h5 file and spawn cameras based on rig config
         self.scene.clone_environments(copy_from_source=False)
@@ -90,28 +90,26 @@ class PoseEvaluationEnv(DirectRLEnv):
         return
 
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
-        self.actions = actions.clone().to(dtype=torch.float32).reshape((1,-1))   
+        actions = actions.clone().to(dtype=torch.float32).reshape((1,-1))
+        if not torch.allclose(actions, self.actions):
+            self.actions = actions
+            self._new_action = True
         return
 
     def _apply_action(self) -> None:
-        # path plan to target pose and execute
-        # self.rmp_flow_controller.set_command(command=self.actions)
-        # pos_target, vel_target = self.rmp_flow_controller.compute()
-        # # print(f"RMP flow controller output: {res}")
-
-        # self.robot.set_joint_position_target(pos_target)
-        # self.robot.write_data_to_sim()
-        # # env.unwrapped.sim.step()
-        # self.robot.update(self.sim.get_physics_dt())
-
-        # print(self.robot_entity_cfg)
-        self.ik_controller.reset()
-        self.ik_controller.set_command(self.actions) # (N, 7) target pose in world frame
+        if self._new_action:
+            self.ik_controller.set_command(self.actions) # (N, 7) target pose in world frame
+            self._new_action = False
+        # self.ik_controller.set_command(self.actions) # (N, 7) target pose in world frame
 
         if self.robot.is_fixed_base:
             eef_jacobi_idx = self.robot_entity_cfg.body_ids[0] - 1
         else:
-            eef_jacobi_idx = self.robot_entity_cfg.body_ids[0]
+            eef_jacobi_idx = self.robot_entity_cfg.body_ids[0]  
+
+        # print("body_names:", self.robot.data.body_names)
+        # print("body_ids:", self.robot_entity_cfg.body_ids)
+        # print("jacobians shape:", self.robot.root_physx_view.get_jacobians().shape)
 
         jacobians = self.robot.root_physx_view.get_jacobians()[:, eef_jacobi_idx, :, self.robot_entity_cfg.joint_ids]
         eef_pose_w = self.robot.data.body_pose_w[:, self.robot_entity_cfg.body_ids[0]]
@@ -124,9 +122,19 @@ class PoseEvaluationEnv(DirectRLEnv):
         joint_pos_des = self.ik_controller.compute(eef_pos_b, eef_quat_b, jacobians, joint_pos)
         # apply actions
         self.robot.set_joint_position_target(joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
-        self.scene.write_data_to_sim()
-        self.sim.step()
-        self.scene.update(self.sim.get_physics_dt())
+        # self.scene.write_data_to_sim()
+        # self.sim.step()
+        # self.scene.update(self.sim.get_physics_dt())
+        # print("eef_pos_b:", eef_pos_b)
+        # print("eef_quat_b:", eef_quat_b)
+        # print("target:", self.actions)
+        # print("joint_pos_des:", joint_pos_des)
+
+
+        # update marker poses
+        eef_pose_w = self.robot.data.body_pose_w[:, self.robot_entity_cfg.body_ids[0], 0:7]
+        self.eef_markers.visualize(eef_pose_w[:, 0:3], eef_pose_w[:, 3:7])
+        self.goal_markers.visualize(self.actions[:, 0:3] + self.scene.env_origins, self.actions[:, 3:7])
 
 
         return

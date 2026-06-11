@@ -13,7 +13,7 @@ from isaaclab_sensor_learning import USD_DIR
 
 FRANKA_FR3_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        usd_path=f"{USD_DIR}/fr3.usda",
+        usd_path=f"{USD_DIR}/fr3/fr3.usda",
         activate_contact_sensors=False,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -36,13 +36,13 @@ FRANKA_FR3_CFG = ArticulationCfg(
         },
     ),
     actuators={
-        "panda_shoulder": ImplicitActuatorCfg(
+        "fr3_shoulder": ImplicitActuatorCfg(
             joint_names_expr=["fr3_joint[1-4]"],
             effort_limit_sim=87.0,
-            stiffness=400.0,
+            stiffness=600.0,
             damping=80.0,
         ),
-        "panda_forearm": ImplicitActuatorCfg(
+        "fr3_forearm": ImplicitActuatorCfg(
             joint_names_expr=["fr3_joint[5-7]"],
             effort_limit_sim=12.0,
             stiffness=400.0,
@@ -51,3 +51,6 @@ FRANKA_FR3_CFG = ArticulationCfg(
     },
     soft_joint_pos_limit_factor=1.0,
 )
+# # Be careful when changing control-related parameters
+# k_gains: [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0] # Stiffness parameters of the follower's joint impedance controller.
+# d_gains: [30.0, 30.0, 30.0, 30.0, 10.0, 10.0, 5.0] # Damping parameters of the follower's joint impedance controller.
