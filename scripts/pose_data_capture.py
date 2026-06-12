@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 from isaaclab.app import AppLauncher
 import argparse
 
@@ -37,6 +36,8 @@ import data_utils.pose_generator as pose_generator
 import pprint as pp
 import os
 
+import time
+
 
 def main():
     env_cfg = parse_env_cfg(
@@ -51,7 +52,9 @@ def main():
     # reset environment
     env.reset()
 
-    print(env.unwrapped.cfg.__dict__.keys())
+    # print(env.unwrapped.cfg.__dict__.keys())
+
+    time.sleep(10)
 
     # set up data file paths and metadata
     # tree_name = os.path.splitext(os.path.basename(env_cfg.tree_usd_path))[
@@ -155,7 +158,7 @@ def main():
                 break
             else:
                 dlog.save_observations(observations=observations)
-            break
+            # break
 
     # close the simulator
     env.close()
