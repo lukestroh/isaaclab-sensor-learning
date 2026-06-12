@@ -10,7 +10,7 @@ import torch
 from collections.abc import Sequence
 
 import isaaclab.sim as sim_utils
-from isaaclab.assets import Articulation
+from isaaclab.assets import Articulation, AssetBase
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
@@ -48,13 +48,14 @@ class PoseDataCaptureEnv(DirectRLEnv):
         spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
         # clone and replicate
         self.scene.clone_environments(copy_from_source=False)
-        # add dome light
-        # light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(1.0, 1.0, 1.0))
-        # light_cfg.func("/World/Light", light_cfg)
+        
 
+        # trees
+        # self.trees = AssetBase(cfg=self.cfg.trees_collection)
         # add tree
-        self.cfg.tree_usd_path = os.path.join(pdc.PKG_DIR, "trees/models", "lpy_envy_00000_uv.usda")
-        self._curr_tree_mesh_prim = usd_utils.load_usd(usd_path=self.cfg.tree_usd_path, name="lpy_envy_00000", env=0)
+        # self.cfg.tree_usd_path = os.path.join(pdc.PKG_DIR, "trees/models", "lpy_envy_00000_uv.usda")
+        # self._curr_tree_mesh_prim = usd_utils.load_usd(usd_path=self.cfg.tree_usd_path, name="lpy_envy_00000", env=0)
+
         # add sensors
         for sensor_name, sensor_cfg in self._sensor_cfgs.items():
             if isinstance(sensor_cfg, CameraCfg):

@@ -3,12 +3,16 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-from isaaclab.assets import ArticulationCfg
+from isaaclab.assets import AssetBaseCfg, ArticulationCfg, RigidObjectCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sim import SimulationCfg, RenderCfg
+from isaaclab.sim import SimulationCfg, RenderCfg, MultiUsdFileCfg, SpawnerCfg, RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
 
+
+from isaaclab_sensor_learning import USD_DIR, TREES_DIR
+import glob
+import os
 from pathlib import Path
 
 
@@ -21,7 +25,7 @@ class PoseDataCaptureEnvCfg(DirectRLEnvCfg):
     action_space = 1
     observation_space = 4
     state_space = 0
-    n_envs = 1
+    n_envs = 2
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
@@ -40,4 +44,17 @@ class PoseDataCaptureEnvCfg(DirectRLEnvCfg):
         Path(__file__).parent.parent.parent.parent / "config/rigs/rig0.yaml"
     )  # NOTE: Standin for now, will be replaced by arguments from evolutionary outputs
     # rig_yaml_path: str = "pose_data_capture/pose_data_capture/assets/rigs/rig0.yaml"
-    tree_usd_path: str = ""
+
+
+
+    # tree_usd_path: str = ""
+    # trees
+    trees_collection = AssetBaseCfg(
+        prim_path="/World/envs/env_.*/tree",
+        spawn=MultiUsdFileCfg(
+            usd_path=glob.glob(os.path.join(TREES_DIR, "models", "*_uv.usda")),
+            random_choice=False,
+            rigid_props=RigidBodyPropertiesCfg(kinematic_enabled=True),
+        ),
+        debug_vis=True,
+    )

@@ -57,47 +57,25 @@ def main():
     # reset environment
     env.reset()
     robot = env.unwrapped.robot
-    # ik_controller = env.unwrapped.ik_controller
-    # ik_controller.reset()
 
-
-
-# rmp_flow_controller = env.unwrapped.rmp_flow_controller
-    # rmp_flow_controller.initialize(prim_paths_expr="/World/envs/env_.*/robot")
-
-    def get_tf(source_frame, target_frame, pose, quat):
-        if source_frame == target_frame:
-            return torch.cat([pose, quat], dim=-1)
-        source_pos, source_quat = pose, quat
-        print(f"Source pos: {source_pos}, source quat: {source_quat}")
+    # def get_tf(source_frame, target_frame, pose, quat):
+    #     if source_frame == target_frame:
+    #         return torch.cat([pose, quat], dim=-1)
+    #     source_pos, source_quat = pose, quat
+    #     print(f"Source pos: {source_pos}, source quat: {source_quat}")
         
-        target_pos, target_quat = (
-            robot.data.body_pos_w[:, robot.find_bodies(target_frame)[0]],
-            robot.data.body_quat_w[:, robot.find_bodies(target_frame)[0]],
-        )
-        print(f"Target pos: {target_pos}, target quat: {target_quat}")
-        relative_tf = math_utils.subtract_frame_transforms(source_pos, source_quat, target_pos, target_quat)
-        return relative_tf
+    #     target_pos, target_quat = (
+    #         robot.data.body_pos_w[:, robot.find_bodies(target_frame)[0]],
+    #         robot.data.body_quat_w[:, robot.find_bodies(target_frame)[0]],
+    #     )
+    #     print(f"Target pos: {target_pos}, target quat: {target_quat}")
+    #     relative_tf = math_utils.subtract_frame_transforms(source_pos, source_quat, target_pos, target_quat)
+    #     return relative_tf
 
-    # robot_base_pos = robot.data.body_pos_w[:, robot.find_bodies("fr3_link1")[0]]
-    # robot_base_quat = robot.data.body_quat_w[:, robot.find_bodies("fr3_link1")[0]]
-
-    target_pos = torch.tensor([[0.5, 0.5, 0.7]], device=env.unwrapped.device)
-    target_quat = torch.tensor([[0.707, 0, 0.707, 0]], device=env.unwrapped.device)  # wxyz
-
-    # target_pos_b, target_quat_b = get_tf(
-    #     "world", "fr3_link1", target_pos[torch.newaxis, :], target_quat[torch.newaxis, :]
-    # )
-
-    # curr_goal_idx = 0
-    # # Create buffers to store actions
-    # ik_commands = torch.zeros(scene.num_envs, ik_controller.action_dim, device=robot.device)
-    # ik_commands[:] = eef_goals[curr_goal_idx]
-
-    # # reset joint state
-    # joint_pos = robot.data.default_joint_pos.clone()
-    # joint_vel = robot.data.default_joint_vel.clone()
-    # robot.write_joint_state_to_sim(joint_pos, joint_vel)
+    # reset joint state
+    joint_pos = robot.data.default_joint_pos.clone()
+    joint_vel = robot.data.default_joint_vel.clone()
+    robot.write_joint_state_to_sim(joint_pos, joint_vel)
     robot.reset()
     # ik_controller.reset()
     # env.unwrapped.sim.step()
@@ -108,48 +86,25 @@ def main():
         [0.5, 0, 0.5, 0.0, 1.0, 0.0, 0.0],
     ]
 
-    # if not args_cli.headless:
-    # time.sleep(10)
 
-    # count = 0
+    idx = 0
     # # simulate environment
     while simulation_app.is_running():
         with torch.inference_mode():
 
-            # robot.set_joint_velocity_target(vel_target)
-
-            #         print(f"Running IK to pose for goal index: {curr_goal_idx}")
-            #         print(ik_commands)
-
-            #         mp.run_ik_to_pose(
-            #             robot=robot,
-            #             ik_controller=ik_controller,
-            #             robot_entity_cfg=robot_entity_cfg,
-            #             ee_jacobi_idx=ee_jacobi_idx,
-            #             scene=scene,
-            #             sim=env.unwrapped.sim,
-            #             goal_pos_w=ik_commands[:, 0:3],
-            #             goal_quat_w=ik_commands[:, 3:7],
-            #             num_steps=1000,
-            #             eef_marker=eef_marker,
-            #             goal_marker=goal_marker,
-            #         )
-
-            # rmp_flow_controller.set_command(command=actions)
-            # pos_target, vel_target = rmp_flow_controller.compute()
-            # # print(f"RMP flow controller output: {res}")
-
-            # robot.set_joint_position_target(pos_target)
-            # robot.write_data_to_sim()
-            # # env.unwrapped.sim.step()
-            # robot.update(env.unwrapped.sim.get_physics_dt())
+            if torch.allclose(robot.data.body_pos_w[:, robot.find_bodies("wrist_3_link")[0]], torch.tensor([eef_goals[idx][0:3]], device=env.unwrapped.device), atol=0.01) and torch.allclose(robot.data.body_quat_w[:, robot.find_bodies("wrist_3_link")[0]], torch.tensor([eef_goals[idx][3:7]], device=env.unwrapped.device), atol=0.01):
+                print(f"Reached goal {idx}!")
+                idx = (idx + 1) % len(eef_goals)
+                print(f"Moving to goal {idx}...")
+                time.sleep(5)
 
             print(robot.data.body_pos_w[:, robot.find_bodies("wrist_3_link")[0]])
             print(robot.data.body_quat_w[:, robot.find_bodies("wrist_3_link")[0]])
 
-            actions = torch.cat([target_pos, target_quat], dim=-1)
-            actions = torch.tensor([[0.0, 0.5, 0.6, 1.0, 0.0, 0.0, 0.0]], device=env.unwrapped.device)
+            # actions = torch.cat([target_pos, target_quat], dim=-1)
+            actions = torch.tensor([eef_goals[idx]], device=env.unwrapped.device)
             observations, rewards, terminated, truncated, info = env.step(actions)
+
 
     return
 

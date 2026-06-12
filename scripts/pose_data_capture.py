@@ -29,8 +29,8 @@ import numpy as np
 
 from isaaclab_tasks.utils import parse_env_cfg
 
-import pose_data_capture.tasks  # noqa: F401
-from pose_data_capture.utils import quaternion_utils as qutils
+import isaaclab_sensor_learning.tasks  # noqa: F401
+from isaaclab_sensor_learning.utils import quaternion_utils as qutils
 
 import data_utils.data_logger as data_logger
 import data_utils.pose_generator as pose_generator
@@ -51,12 +51,13 @@ def main():
     # reset environment
     env.reset()
 
-    # print(env.unwrapped.cfg.__dict__.keys())
+    print(env.unwrapped.cfg.__dict__.keys())
 
     # set up data file paths and metadata
-    tree_name = os.path.splitext(os.path.basename(env_cfg.tree_usd_path))[
-        0
-    ]  # TODO: move tree path as arg to set up multiple envs
+    # tree_name = os.path.splitext(os.path.basename(env_cfg.tree_usd_path))[
+    #     0
+    # ]  # TODO: move tree path as arg to set up multiple envs
+    tree_name = "test_tree_00000"  # TODO: remove after testing
     _tree = tree_name.split("_")
     tree_namespace, tree_type, tree_id = _tree[0], _tree[1], _tree[2]
     dlog = data_logger.DataLogger(tree_name=tree_name)
@@ -102,12 +103,13 @@ def main():
         "poses": discrete_poses,
     }
     tree_metadata = {
-        "tree_usd_path": env_cfg.tree_usd_path,
+        "tree_usd_path": "testtesttesttest",
         "tree_namespace": tree_namespace,
         "tree_type": tree_type,
         "tree_id": tree_id,
         "pose": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
     }
+    
     # sensors
     sensor_metadata = {}
     for sensor_name, sensor in env.unwrapped.sensors.items():
@@ -145,7 +147,6 @@ def main():
         with torch.inference_mode():
             # compute zero actions
             actions = torch.tensor(discrete_poses[pose_idx][np.newaxis, :], device=env.unwrapped.device)
-            # apply actions
             observations, rewards, terminated, truncated, info = env.step(actions)
 
             pose_idx += 1
@@ -154,10 +155,11 @@ def main():
                 break
             else:
                 dlog.save_observations(observations=observations)
+            break
 
     # close the simulator
     env.close()
-    print("\n[INFO]: Simulation finished, data saved to: ", datafile_path)
+    # print("\n[INFO]: Simulation finished, data saved to: ", datafile_path)
     return
 
 
