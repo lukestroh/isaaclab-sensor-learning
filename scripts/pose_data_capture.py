@@ -59,9 +59,9 @@ def main():
     # reset environment
     env.reset()
 
-    print(env.unwrapped)
 
     robot: Articulation = env.unwrapped.robot
+    print(robot.data.body_names)
 
     # Set up data logger
     dlog = data_logger.DataLogger()
@@ -144,9 +144,9 @@ def main():
     # print(f"DISCRETE POSES: {discrete_poses.shape}")
 
     # # print all robot prims in the stage
-    # for prim in stage_utils.get_current_stage().Traverse():
-    #     if "robot" in str(prim.GetPath()):
-    #         print(prim.GetPath())
+    for prim in stage_utils.get_current_stage().Traverse():
+        if "robot" in str(prim.GetPath()):
+            print(prim.GetPath())
 
     # from pxr import UsdPhysics, UsdGeom
     # import omni
@@ -166,6 +166,15 @@ def main():
     #     xf = UsdGeom.Xformable(prim)
     #     print(path)
     #     print(xf.GetLocalTransformation())
+
+    from pxr import UsdGeom, Usd, UsdPhysics
+    stage = env.unwrapped.sim.stage
+    root = stage.GetPrimAtPath("/World/envs/env_0/robot")
+
+    for prim in Usd.PrimRange(root):
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            print(prim.GetPath())
+
 
     # sensors
     sensor_metadata = {}
@@ -250,11 +259,11 @@ def main():
 
 
             # Remove after testing
-            sensors = env.unwrapped.sensors
-            for sensor_name, sensor in sensors.items():
-                # print sensor location
-                sensor_pos_w = sensor.data.pos_w.torch
-                print(sensor_pos_w)
+            # sensors = env.unwrapped.sensors
+            # for sensor_name, sensor in sensors.items():
+            #     # print sensor location
+            #     sensor_pos_w = sensor.data.pos_w.torch
+            #     print(sensor_pos_w)
             # print(f"\nGoal pos: {discrete_poses[pose_idx][0:3]}, goal quat: {discrete_poses[pose_idx][3:7]}")
             # print(f"Curr pos: {robot.data.body_pos_w[:, robot.find_bodies('ur10e__wrist_3_link')[0]]}")
             # print(f"Curr quat: {robot.data.body_quat_w[:, robot.find_bodies('ur10e__wrist_3_link')[0]]}")
