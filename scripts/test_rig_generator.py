@@ -28,8 +28,6 @@ import numpy as np
 from isaaclab_tasks.utils import parse_env_cfg
 
 import isaaclab_sensor_learning.tasks  # noqa: F401
-from isaaclab_sensor_learning.utils import quaternion_utils as qutils
-
 import data_utils.data_logger as data_logger
 import data_utils.pose_generator as pose_generator
 import pprint as pp
@@ -47,8 +45,6 @@ from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
 import isaaclab_sensor_learning.sensor.camera_utils as camera_utils
 import isaaclab_sensor_learning.sensor.lidar_utils as lidar_utils
 import isaaclab_sensor_learning.sensor.rig_utils as rig_utils
-import isaaclab_sensor_learning.utils.quaternion_utils as qutils
-
 
 
 def main():
@@ -65,7 +61,6 @@ def main():
     env.reset()
 
     # # print(stage_utils.print_stage_prim_paths())
-
 
     # test_rig = os.path.join(CFG_DIR, "rigs", "test_rig0.yaml")
     # rig_cfg = load_rig_yaml(test_rig)
@@ -84,8 +79,6 @@ def main():
     # print(eef_sensor_layout)
     # rig_generator.generate_rig(layout_type="sphere")
 
-
-    
     while simulation_app.is_running():
         with torch.inference_mode():
             # compute zero actions
@@ -98,7 +91,6 @@ def main():
     env.close()
 
     return
-
 
 
 if __name__ == "__main__":

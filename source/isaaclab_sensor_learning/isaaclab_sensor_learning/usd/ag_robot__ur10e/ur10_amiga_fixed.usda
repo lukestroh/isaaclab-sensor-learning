@@ -1,0 +1,465 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary cameraSettings = {
+            dictionary Front = {
+                double3 position = (5, 0, 0)
+                double radius = 5
+            }
+            dictionary Perspective = {
+                double3 position = (4.32147322497821, -3.3725578832113614, 3.0244966735496295)
+                double3 target = (-1.0220095922918242, 1.6886847646609269, 0.7288321042606243)
+            }
+            dictionary Right = {
+                double3 position = (0, -5, 0)
+                double radius = 5
+            }
+            dictionary Top = {
+                double3 position = (0, 0, 5)
+                double radius = 5
+            }
+            string boundCamera = "/OmniverseKit_Persp"
+        }
+        string creator = "URDF USD Converter v0.1.3"
+        dictionary omni_layer = {
+            string authoring_layer = "./ur10_amiga_fixed.usd"
+            dictionary locked = {
+            }
+            dictionary muteness = {
+            }
+        }
+        dictionary renderSettings = {
+        }
+    }
+    defaultPrim = "pruning_robot"
+    doc = """Generated from Composed Stage of root layer /tmp/tmpcbrr1rnm/pruning_robot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_ag_robot__ur10e_pky9mj6s/usdex_ag_robot__ur10e/pruning_robot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_ag_robot__ur10e_pky9mj6s/temp_ag_robot__ur10e/ag_robot__ur10e.usd
+
+
+Generated from Composed Stage of root layer /home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/usd/ag_robot__ur10e/payloads/base.usd
+"""
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "pruning_robot" (
+    prepend references = @./ag_robot__ur10e/payloads/base.usda@
+    variants = {
+        string Physics = "physx"
+    }
+    append variantSets = "Physics"
+)
+{
+    string isaac:namespace (
+        displayName = "Namespace"
+        doc = "Namespace of the prim in Isaac Sim"
+    )
+
+    over "Geometry"
+    {
+        over "amiga__base"
+        {
+            over "amiga__body"
+            {
+                vector3f physics:angularVelocity = (0, 0, 0)
+                rel physics:simulationOwner
+                vector3f physics:velocity = (0, 0, 0)
+                quatf xformOp:orient = (1.0000001, 0, 0, 0)
+                double3 xformOp:translate = (0, 0, 0)
+                uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                over "amiga__tool0"
+                {
+                    over "linear_slider__base"
+                    {
+                        over "linear_slider__base_link"
+                        {
+                            string isaac:nameOverride (
+                                displayName = "Name Override"
+                                doc = "Name override for prim lookup in base name search"
+                            )
+                            vector3f physics:angularVelocity = (0, 0, 0)
+                            rel physics:simulationOwner
+                            vector3f physics:velocity = (0, 0, 0)
+                            quatf xformOp:orient = (1, -2.5032577e-8, 0, 0)
+                            double3 xformOp:translate = (-0.2250000387430191, 0.3232562243938446, 1.0981061458587646)
+                            uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                            over "linear_slider__moving_base"
+                            {
+                                string isaac:nameOverride (
+                                    displayName = "Name Override"
+                                    doc = "Name override for prim lookup in base name search"
+                                )
+                                vector3f physics:angularVelocity = (0, 0, 0)
+                                rel physics:simulationOwner
+                                vector3f physics:velocity = (-0.025059449, 0, 0)
+                                quatf xformOp:orient = (1, -2.5032577e-8, 0, 0)
+                                double3 xformOp:translate = (-0.6162026524543762, 0.3232562243938446, 1.0981061458587646)
+                                uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                                over "box"
+                                {
+                                    rel physics:simulationOwner
+                                }
+
+                                over "linear_slider__flange"
+                                {
+                                    over "linear_slider__tool0"
+                                    {
+                                        over "ur10e__base_link"
+                                        {
+                                            over "ur10e__base_link_inertia"
+                                            {
+                                                vector3f physics:angularVelocity = (0, 0, 0)
+                                                rel physics:simulationOwner
+                                                vector3f physics:velocity = (-0.025059449, 0, 0)
+                                                quatf xformOp:orient = (6.123234e-17, -1.5328033e-24, 2.5032577e-8, 1)
+                                                double3 xformOp:translate = (-0.2785409986972809, 0.3232562243938446, 1.1481060981750488)
+                                                uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                                                over "ur10e__shoulder_link"
+                                                {
+                                                    vector3f physics:angularVelocity = (2.3002685e-11, 1.0925177e-10, -0.00025153562)
+                                                    rel physics:simulationOwner
+                                                    vector3f physics:velocity = (-0.025059538, 1.1948603e-7, 3.764072e-14)
+                                                    quatf xformOp:orient = (-0.703419, -1.527369e-7, 5.9604645e-8, 0.71077543)
+                                                    double3 xformOp:translate = (-0.2785409986972809, 0.3232562243938446, 1.328805923461914)
+                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                                                    over "ur10e__upper_arm_link"
+                                                    {
+                                                        vector3f physics:angularVelocity = (0.000013804466, -1.4351181e-7, -0.00025153562)
+                                                        rel physics:simulationOwner
+                                                        vector3f physics:velocity = (-0.025058417, 6.829744e-7, 5.6068533e-8)
+                                                        quatf xformOp:orient = (-0.4973922, -0.49739254, 0.5025941, 0.502594)
+                                                        double3 xformOp:translate = (-0.2785409986972809, 0.3232561945915222, 1.328805923461914)
+                                                        uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                                                        over "ur10e__forearm_link"
+                                                        {
+                                                            vector3f physics:angularVelocity = (-0.0000358662, 3.7325e-7, -0.00025153562)
+                                                            rel physics:simulationOwner
+                                                            vector3f physics:velocity = (-0.025055302, 2.5538588e-7, -5.992806e-8)
+                                                            quatf xformOp:orient = (-0.49739224, -0.49739257, 0.5025941, 0.502594)
+                                                            double3 xformOp:translate = (-0.2721669375896454, 0.9359228610992432, 1.3288060426712036)
+                                                            uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                                                            over "ur10e__wrist_1_link"
+                                                            {
+                                                                vector3f physics:angularVelocity = (-0.00024653383, 0.0000025650418, -0.00025153582)
+                                                                rel physics:simulationOwner
+                                                                vector3f physics:velocity = (-0.025054274, 6.719489e-7, -1.7609656e-7)
+                                                                quatf xformOp:orient = (-0.5980326, -0.37106007, 0.60192573, 0.37730196)
+                                                                double3 xformOp:translate = (-0.44036146998405457, 1.509253740310669, 1.3288060426712036)
+                                                                uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                                                                over "ur10e__wrist_2_link"
+                                                                {
+                                                                    vector3f physics:angularVelocity = (-0.0002462494, 0.000029889592, -0.00019575637)
+                                                                    rel physics:simulationOwner
+                                                                    vector3f physics:velocity = (-0.02505446, 3.381148e-7, 1.20474e-8)
+                                                                    quatf xformOp:orient = (-0.16049378, -0.6852521, 0.6924185, -0.15883298)
+                                                                    double3 xformOp:translate = (-0.4409099817276001, 1.4565298557281494, 1.2211774587631226)
+                                                                    uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                                                                    over "ur10e__wrist_3_link"
+                                                                    {
+                                                                        vector3f physics:angularVelocity = (-0.00024625627, 0.000029889687, -0.00019575647)
+                                                                        rel physics:simulationOwner
+                                                                        vector3f physics:velocity = (-0.025054473, 5.5906753e-7, 5.990051e-8)
+                                                                        quatf xformOp:orient = (-0.5980326, -0.37106016, 0.60192573, 0.37730196)
+                                                                        double3 xformOp:translate = (-0.5574536323547363, 1.4577423334121704, 1.221177339553833)
+                                                                        uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                over "base_1" (
+                                                    instanceable = false
+                                                )
+                                                {
+                                                    over "base_1"
+                                                    {
+                                                        rel physics:simulationOwner
+                                                    }
+                                                }
+
+                                                over "base"
+                                                {
+                                                    over "tn__eSeriesUR10e010_sFY7" (
+                                                        instanceable = false
+                                                    )
+                                                    {
+                                                    }
+
+                                                    over "tn__eSeriesUR10e043_sFY7" (
+                                                        instanceable = false
+                                                    )
+                                                    {
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                over "tn__7thlink_move_" (
+                                    instanceable = true
+                                )
+                                {
+                                }
+                            }
+
+                            over "box"
+                            {
+                                rel physics:simulationOwner
+                            }
+
+                            over "tn__7thlink_fixed_" (
+                                instanceable = false
+                            )
+                            {
+                            }
+                        }
+                    }
+                }
+
+                over "box"
+                {
+                    rel physics:simulationOwner
+                }
+
+                over "box_1"
+                {
+                    rel physics:simulationOwner
+                }
+
+                over "box_2"
+                {
+                    rel physics:simulationOwner
+                }
+
+                over "frame_on_amiga_v2_simplified" (
+                    instanceable = false
+                )
+                {
+                }
+            }
+        }
+    }
+
+    over "Physics"
+    {
+        over "ur10e__shoulder_pan_joint" (
+            delete apiSchemas = ["PhysxJointAxisAPI:angular"]
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+            float drive:angular:physics:targetPosition = 52.4
+            float physics:lowerLimit = -360
+            float physics:upperLimit = 360
+            float state:angular:physics:position = 89.40394
+            float state:angular:physics:velocity = -0.00025153562
+        }
+
+        over "ur10e__shoulder_lift_joint" (
+            delete apiSchemas = ["PhysxJointAxisAPI:angular"]
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+            float drive:angular:physics:targetPosition = -30
+            float physics:lowerLimit = -360
+            float physics:upperLimit = 360
+            float state:angular:physics:position = -0.0000010752847
+            float state:angular:physics:velocity = -0.000013805193
+        }
+
+        over "ur10e__elbow_joint" (
+            delete apiSchemas = ["PhysxJointAxisAPI:angular"]
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+            float physics:lowerLimit = -180
+            float physics:upperLimit = 180
+            float state:angular:physics:position = 3.7450275e-7
+            float state:angular:physics:velocity = 0.000049673374
+        }
+
+        over "ur10e__wrist_1_joint" (
+            delete apiSchemas = ["PhysxJointAxisAPI:angular"]
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+            float drive:angular:physics:targetPosition = 26.1
+            float physics:lowerLimit = -360
+            float physics:upperLimit = 360
+            float state:angular:physics:position = 26.100004
+            float state:angular:physics:velocity = 0.00021067893
+        }
+
+        over "ur10e__wrist_2_joint" (
+            delete apiSchemas = ["PhysxJointAxisAPI:angular"]
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+            float physics:lowerLimit = -360
+            float physics:upperLimit = 360
+            float state:angular:physics:position = -7.212899e-7
+            float state:angular:physics:velocity = -0.00006211329
+        }
+
+        over "ur10e__wrist_3_joint" (
+            delete apiSchemas = ["PhysxJointAxisAPI:angular"]
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+            float physics:lowerLimit = -360
+            float physics:upperLimit = 360
+            float state:angular:physics:position = -3.335755e-9
+            float state:angular:physics:velocity = 6.7244077e-9
+        }
+
+        over "linear_slider__joint1"
+        {
+            float drive:linear:physics:damping = 5
+            float drive:linear:physics:maxForce = 20
+            float drive:linear:physics:stiffness = 8
+            float drive:linear:physics:targetPosition = 0.21200001
+            uniform token drive:linear:physics:type = "acceleration"
+            uniform token physics:axis = "X"
+            float physics:lowerLimit = -0.4
+            float physics:upperLimit = 0.4
+            float state:linear:physics:position = -0.4
+            float state:linear:physics:velocity = -0.025059449
+        }
+    }
+
+    def OmniGraph "PushGraph"
+    {
+        token evaluationMode = "Automatic"
+        token evaluator:type = "push"
+        token fabricCacheBacking = "StageWithoutHistory"
+        int2 fileFormatVersion = (1, 9)
+        token pipelineStage = "pipelineStageSimulation"
+
+        def OmniGraphNode "linear_slider__joint1CurveNode"
+        {
+            custom string inputs:IndividualOutputs
+            custom rel inputs:Prim = </pruning_robot/Physics/linear_slider__joint1> (
+                customData = {
+                    dictionary omni = {
+                        dictionary graph = {
+                            string relType = "target"
+                        }
+                    }
+                }
+            )
+            custom timecode inputs:Time
+            custom bool inputs:UseGlobalTime
+            token node:type = "omni.anim.curve.core.AnimCurve"
+            int node:typeVersion = 5
+            custom rel outputs_AnimFrame (
+                customData = {
+                    dictionary omni = {
+                        dictionary graph = {
+                            string relType = "bundle"
+                        }
+                    }
+                }
+            )
+        }
+    }
+    variantSet "Physics" = {
+        "mujoco" (
+            prepend payload = @./ag_robot__ur10e/payloads/Physics/mujoco.usda@
+        ) {
+
+        }
+        "none" {
+
+        }
+        "physics" (
+            prepend payload = @./ag_robot__ur10e/payloads/Physics/physics.usda@
+        ) {
+
+        }
+        "physx" (
+            prepend payload = @./ag_robot__ur10e/payloads/Physics/physx.usda@
+        ) {
+
+        }
+    }
+}
+
+def "Render" (
+    hide_in_stage_window = true
+    no_delete = true
+)
+{
+    def "OmniverseKit"
+    {
+        def "HydraTextures" (
+            hide_in_stage_window = true
+            no_delete = true
+        )
+        {
+            def RenderProduct "omni_kit_widget_viewport_ViewportTexture_0" (
+                prepend apiSchemas = ["OmniRtxSettingsCommonAdvancedAPI_1", "OmniRtxSettingsRtAdvancedAPI_1", "OmniRtxSettingsPtAdvancedAPI_1", "OmniRtxPostColorGradingAPI_1", "OmniRtxPostChromaticAberrationAPI_1", "OmniRtxPostBloomPhysicalAPI_1", "OmniRtxPostMatteObjectAPI_1", "OmniRtxPostCompositingAPI_1", "OmniRtxPostDofAPI_1", "OmniRtxPostMotionBlurAPI_1", "OmniRtxPostTvNoiseAPI_1", "OmniRtxPostTonemapIrayReinhardAPI_1", "OmniRtxPostDebugSettingsAPI_1", "OmniRtxDebugSettingsAPI_1"]
+                hide_in_stage_window = true
+                no_delete = true
+            )
+            {
+                rel camera = </OmniverseKit_Persp>
+                token omni:rtx:background:source:texture:textureMode = "repeatMirrored"
+                token omni:rtx:background:source:type = "domeLight"
+                bool omni:rtx:dlss:frameGeneration = 0
+                string omni:rtx:material:db:rtSensorNameToIdMap = "DefaultMaterial:0;AsphaltStandardMaterial:1;AsphaltWeatheredMaterial:2;VegetationGrassMaterial:3;WaterStandardMaterial:4;GlassStandardMaterial:5;FiberGlassMaterial:6;MetalAlloyMaterial:7;MetalAluminumMaterial:8;MetalAluminumOxidizedMaterial:9;PlasticStandardMaterial:10;RetroMarkingsMaterial:11;RetroSignMaterial:12;RubberStandardMaterial:13;SoilClayMaterial:14;ConcreteRoughMaterial:15;ConcreteSmoothMaterial:16;OakTreeBarkMaterial:17;FabricStandardMaterial:18;PlexiGlassStandardMaterial:19;MetalSilverMaterial:20"
+                bool omni:rtx:material:db:syncLoads = 1
+                bool omni:rtx:post:registeredCompositing:invertColorCorrection = 1
+                bool omni:rtx:post:registeredCompositing:invertToneMap = 1
+                bool omni:rtx:pt:lightcache:cached:dontResolveConflicts = 1
+                int omni:rtx:pt:maxSamplesPerLaunch = 2073600
+                int omni:rtx:pt:mgpu:maxPixelsPerRegionExponent = 12
+                color3f omni:rtx:rt:ambientLight:color = (0.1, 0.1, 0.1)
+                bool omni:rtx:rt:demoire = 0
+                bool omni:rtx:rt:ecoMode:enabled
+                bool omni:rtx:rt:lightcache:spatialCache:dontResolveConflicts = 1
+                bool omni:rtx:scene:hydra:materialSyncLoads = 1
+                bool omni:rtx:scene:hydra:mdlMaterialWarmup = 1
+                uint omni:rtx:viewTile:limit = 4294967295
+                rel orderedVars = </Render/Vars/LdrColor>
+                custom bool overrideClipRange = 0
+                uniform int2 resolution = (1280, 720)
+            }
+        }
+    }
+
+    def RenderSettings "OmniverseGlobalRenderSettings" (
+        prepend apiSchemas = ["OmniRtxSettingsGlobalRtAdvancedAPI_1", "OmniRtxSettingsGlobalPtAdvancedAPI_1"]
+        no_delete = true
+    )
+    {
+        rel products = </Render/OmniverseKit/HydraTextures/omni_kit_widget_viewport_ViewportTexture_0>
+    }
+
+    def "Vars"
+    {
+        def RenderVar "LdrColor" (
+            hide_in_stage_window = true
+            no_delete = true
+        )
+        {
+            uniform string sourceName = "LdrColor"
+        }
+    }
+}

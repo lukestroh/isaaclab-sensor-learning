@@ -18,7 +18,6 @@ from isaaclab.utils.math import subtract_frame_transforms
 
 import isaaclab_sensor_learning as isl
 import isaaclab_sensor_learning.utils.usd_utils as usd_utils
-import isaaclab_sensor_learning.utils.quaternion_utils as qutils
 from .evaluation_env_cfg import PoseEvaluationEnvCfg
 
 import os
@@ -59,7 +58,7 @@ class PoseEvaluationEnv(DirectRLEnv):
         # self.curr_tree_mesh_prim = usd_utils.load_usd(usd_path=self.cfg.tree_usd_path, name="lpy_envy_00000", env=0)
 
         self.cfg.robot_cfg.init_state.pos = (0.0, 0.0, 0.0)
-        self.cfg.robot_cfg.init_state.rot = tuple(qutils.xyzw_to_wxyz(np.asarray([0.0, 0.0, 0.0, 1.0])))
+        self.cfg.robot_cfg.init_state.rot = tuple(0.0, 0.0, 0.0, 1.0)
         self.robot = Articulation(cfg=self.cfg.robot_cfg)
         self.scene.articulations["robot"] = self.robot
 

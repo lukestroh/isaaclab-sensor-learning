@@ -41,8 +41,8 @@ def unload_usd(prim_path: str) -> bool:
 
 
 def generate_usd_from_urdf(
+    robot_name: str,
     urdf_path: str,
-    output_usd_dir: str = USD_DIR,
     robot_cfg: dict = {
         "base": "amiga",
         "arm": "fr3",
@@ -67,13 +67,15 @@ def generate_usd_from_urdf(
         "fr3_joint6": 10.0,
         "fr3_joint7": 5.0,
     },
-) -> None:
+) -> UrdfConverter:
     """
     Generate a USD file from a URDF file using the `usd_from_urdf` function from `isaaclab.sim.utils`.
     """
     # sim_utils.usd_from_urdf(urdf_path=urdf_path, output_usd_path=output_usd_path)
     usd_file_name = os.path.splitext(os.path.basename(urdf_path))[0]
-    usd_dir = os.path.join(USD_DIR, "fr3")
+    usd_dir = os.path.join(USD_DIR, robot_name)
+    if not os.path.exists(usd_dir):
+        os.mkdir(usd_dir)
 
     pd_gains_cfg = UrdfConverterCfg.JointDriveCfg.PDGainsCfg(stiffness=stiffness, damping=damping)
 
@@ -83,7 +85,7 @@ def generate_usd_from_urdf(
 
     usd_cvrtr_cfg = UrdfConverterCfg(
         fix_base=True,
-        asset_path=os.path.join(URDF_DIR, "fr3/fr3.urdf"),
+        asset_path=os.path.join(URDF_DIR, f"{robot_name}/{robot_name}.urdf"),
         usd_dir=usd_dir,
         usd_file_name=usd_file_name + ".usda",
         force_usd_conversion=True,
@@ -94,7 +96,5 @@ def generate_usd_from_urdf(
     )
 
     usd_converter = UrdfConverter(cfg=usd_cvrtr_cfg)
-
-    print(usd_converter)
 
     return usd_converter

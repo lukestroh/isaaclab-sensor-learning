@@ -1,0 +1,429 @@
+#usda 1.0
+(
+    customLayerData = {
+        string creator = "URDF USD Converter v0.1.3"
+    }
+    defaultPrim = "pruning_robot"
+    doc = """Generated from Composed Stage of root layer /tmp/tmpcbrr1rnm/pruning_robot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_ag_robot__ur10e_pky9mj6s/usdex_ag_robot__ur10e/pruning_robot.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_ag_robot__ur10e_pky9mj6s/temp_ag_robot__ur10e/ag_robot__ur10e.usd
+
+
+Generated from Composed Stage of root layer /home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/usd/ag_robot__ur10e/payloads/base.usd
+"""
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    subLayers = [
+        @./physics.usda@
+    ]
+    upAxis = "Z"
+)
+
+over "pruning_robot"
+{
+    over "Physics"
+    {
+        def MjcActuator "linear_slider__joint1_actuator"
+        {
+            uniform double[] mjc:biasPrm = [0, -200, -30, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:biasType = "affine"
+            uniform double mjc:forceRange:max = 0.05000000074505806
+            uniform double mjc:forceRange:min = -0.05000000074505806
+            uniform double[] mjc:gainPrm = [200, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:gainType = "fixed"
+            custom rel mjc:target
+            prepend rel mjc:target = </pruning_robot/Physics/linear_slider__joint1>
+        }
+
+        def MjcActuator "ur10e__shoulder_pan_joint_actuator"
+        {
+            uniform double[] mjc:biasPrm = [0, -3.4906585216522217, -0.5235987901687622, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:biasType = "affine"
+            uniform double mjc:forceRange:max = 330
+            uniform double mjc:forceRange:min = -330
+            uniform double[] mjc:gainPrm = [3.4906585216522217, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:gainType = "fixed"
+            custom rel mjc:target
+            prepend rel mjc:target = </pruning_robot/Physics/ur10e__shoulder_pan_joint>
+        }
+
+        def MjcActuator "ur10e__shoulder_lift_joint_actuator"
+        {
+            uniform double[] mjc:biasPrm = [0, -3.4906585216522217, -0.5235987901687622, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:biasType = "affine"
+            uniform double mjc:forceRange:max = 330
+            uniform double mjc:forceRange:min = -330
+            uniform double[] mjc:gainPrm = [3.4906585216522217, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:gainType = "fixed"
+            custom rel mjc:target
+            prepend rel mjc:target = </pruning_robot/Physics/ur10e__shoulder_lift_joint>
+        }
+
+        def MjcActuator "ur10e__elbow_joint_actuator"
+        {
+            uniform double[] mjc:biasPrm = [0, -3.4906585216522217, -0.5235987901687622, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:biasType = "affine"
+            uniform double mjc:forceRange:max = 150
+            uniform double mjc:forceRange:min = -150
+            uniform double[] mjc:gainPrm = [3.4906585216522217, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:gainType = "fixed"
+            custom rel mjc:target
+            prepend rel mjc:target = </pruning_robot/Physics/ur10e__elbow_joint>
+        }
+
+        def MjcActuator "ur10e__wrist_1_joint_actuator"
+        {
+            uniform double[] mjc:biasPrm = [0, -3.4906585216522217, -0.5235987901687622, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:biasType = "affine"
+            uniform double mjc:forceRange:max = 54
+            uniform double mjc:forceRange:min = -54
+            uniform double[] mjc:gainPrm = [3.4906585216522217, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:gainType = "fixed"
+            custom rel mjc:target
+            prepend rel mjc:target = </pruning_robot/Physics/ur10e__wrist_1_joint>
+        }
+
+        def MjcActuator "ur10e__wrist_2_joint_actuator"
+        {
+            uniform double[] mjc:biasPrm = [0, -3.4906585216522217, -0.5235987901687622, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:biasType = "affine"
+            uniform double mjc:forceRange:max = 54
+            uniform double mjc:forceRange:min = -54
+            uniform double[] mjc:gainPrm = [3.4906585216522217, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:gainType = "fixed"
+            custom rel mjc:target
+            prepend rel mjc:target = </pruning_robot/Physics/ur10e__wrist_2_joint>
+        }
+
+        def MjcActuator "ur10e__wrist_3_joint_actuator"
+        {
+            uniform double[] mjc:biasPrm = [0, -3.4906585216522217, -0.5235987901687622, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:biasType = "affine"
+            uniform double mjc:forceRange:max = 54
+            uniform double mjc:forceRange:min = -54
+            uniform double[] mjc:gainPrm = [3.4906585216522217, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            uniform token mjc:gainType = "fixed"
+            custom rel mjc:target
+            prepend rel mjc:target = </pruning_robot/Physics/ur10e__wrist_3_joint>
+        }
+
+        over "linear_slider__joint1" (
+            delete apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+        }
+
+        over "tn__linear_slider__base_linkbase_joint_no0P"
+        {
+        }
+
+        over "ur10e__shoulder_pan_joint" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "ur10e__shoulder_lift_joint" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "ur10e__elbow_joint" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "ur10e__wrist_1_joint" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "ur10e__wrist_2_joint" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "ur10e__wrist_3_joint" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "tn__amiga__baseamiga__body_sW0C"
+        {
+        }
+
+        over "tn__ur10e__base_linkbase_link_inertia_wm0"
+        {
+        }
+    }
+
+    over "Geometry"
+    {
+        over "amiga__base"
+        {
+            over "amiga__body"
+            {
+                over "amiga__tool0"
+                {
+                    over "linear_slider__base"
+                    {
+                        over "linear_slider__base_link"
+                        {
+                            over "linear_slider__moving_base"
+                            {
+                                over "tn__7thlink_move_"
+                                {
+                                }
+
+                                over "linear_slider__flange"
+                                {
+                                    over "linear_slider__tool0"
+                                    {
+                                        over "ur10e__base_link"
+                                        {
+                                            over "ur10e__base_link_inertia"
+                                            {
+                                                over "base"
+                                                {
+                                                    over "tn__eSeriesUR10e010_sFY7"
+                                                    {
+                                                    }
+
+                                                    over "tn__eSeriesUR10e043_sFY7"
+                                                    {
+                                                    }
+                                                }
+
+                                                over "ur10e__shoulder_link"
+                                                {
+                                                    over "shoulder"
+                                                    {
+                                                        over "tn__eSeriesUR10e023_sFY7"
+                                                        {
+                                                        }
+
+                                                        over "tn__eSeriesUR10e044_sFY7"
+                                                        {
+                                                        }
+
+                                                        over "tn__eSeriesUR10e045_sFY7"
+                                                        {
+                                                        }
+                                                    }
+
+                                                    over "ur10e__upper_arm_link"
+                                                    {
+                                                        over "upperarm"
+                                                        {
+                                                            over "tn__eSeriesUR10e028_sFY7"
+                                                            {
+                                                            }
+
+                                                            over "tn__eSeriesUR10e046_sFY7"
+                                                            {
+                                                            }
+
+                                                            over "tn__eSeriesUR10e047_sFY7"
+                                                            {
+                                                            }
+
+                                                            over "tn__eSeriesUR10e049_sFY7"
+                                                            {
+                                                            }
+
+                                                            over "tn__eSeriesUR10e050_sFY7"
+                                                            {
+                                                            }
+
+                                                            over "tn__eSeriesUR10e051_sFY7"
+                                                            {
+                                                            }
+
+                                                            over "tn__eSeriesUR10e052_sFY7"
+                                                            {
+                                                            }
+
+                                                            over "tn__eSeriesUR10e053_sFY7"
+                                                            {
+                                                            }
+                                                        }
+
+                                                        over "ur10e__forearm_link"
+                                                        {
+                                                            over "forearm"
+                                                            {
+                                                                over "tn__eSeriesUR10e031_sFY7"
+                                                                {
+                                                                }
+
+                                                                over "tn__eSeriesUR10e054_sFY7"
+                                                                {
+                                                                }
+
+                                                                over "tn__eSeriesUR10e055_sFY7"
+                                                                {
+                                                                }
+
+                                                                over "tn__eSeriesUR10e056_sFY7"
+                                                                {
+                                                                }
+
+                                                                over "tn__eSeriesUR10e057_sFY7"
+                                                                {
+                                                                }
+
+                                                                over "tn__eSeriesUR10e058_sFY7"
+                                                                {
+                                                                }
+
+                                                                over "tn__eSeriesUR10e059_sFY7"
+                                                                {
+                                                                }
+                                                            }
+
+                                                            over "ur10e__wrist_1_link"
+                                                            {
+                                                                over "wrist1"
+                                                                {
+                                                                    over "tn__eSeriesUR10e037_sFY7"
+                                                                    {
+                                                                    }
+
+                                                                    over "tn__eSeriesUR10e060_sFY7"
+                                                                    {
+                                                                    }
+
+                                                                    over "tn__eSeriesUR10e061_sFY7"
+                                                                    {
+                                                                    }
+                                                                }
+
+                                                                over "ur10e__wrist_2_link"
+                                                                {
+                                                                    over "wrist2"
+                                                                    {
+                                                                        over "tn__eSeriesUR10e040_sFY7"
+                                                                        {
+                                                                        }
+
+                                                                        over "tn__eSeriesUR10e062_sFY7"
+                                                                        {
+                                                                        }
+
+                                                                        over "tn__eSeriesUR10e063_sFY7"
+                                                                        {
+                                                                        }
+                                                                    }
+
+                                                                    over "ur10e__wrist_3_link"
+                                                                    {
+                                                                        over "wrist3"
+                                                                        {
+                                                                        }
+
+                                                                        over "wrist3_1"
+                                                                        {
+                                                                        }
+
+                                                                        over "ur10e__ft_frame"
+                                                                        {
+                                                                        }
+
+                                                                        over "ur10e__flange"
+                                                                        {
+                                                                            over "ur10e__tool0"
+                                                                            {
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                    over "wrist2_1"
+                                                                    {
+                                                                    }
+                                                                }
+
+                                                                over "wrist1_1"
+                                                                {
+                                                                }
+                                                            }
+
+                                                            over "forearm_1"
+                                                            {
+                                                            }
+                                                        }
+
+                                                        over "upperarm_1"
+                                                        {
+                                                        }
+                                                    }
+
+                                                    over "shoulder_1"
+                                                    {
+                                                    }
+                                                }
+
+                                                over "base_1"
+                                                {
+                                                }
+                                            }
+
+                                            over "ur10e__base"
+                                            {
+                                            }
+                                        }
+                                    }
+                                }
+
+                                over "box"
+                                {
+                                }
+                            }
+
+                            over "tn__7thlink_fixed_"
+                            {
+                            }
+
+                            over "box"
+                            {
+                            }
+                        }
+                    }
+                }
+
+                over "frame_on_amiga_v2_simplified"
+                {
+                }
+
+                over "box"
+                {
+                }
+
+                over "box_1"
+                {
+                }
+
+                over "box_2"
+                {
+                }
+            }
+        }
+    }
+
+    over "Materials"
+    {
+    }
+
+    over "VisualMaterials"
+    {
+    }
+}
+

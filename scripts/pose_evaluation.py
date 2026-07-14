@@ -45,7 +45,6 @@ from isaaclab_tasks.utils import parse_env_cfg
 # from isaaclab_sensor_learning.motion_planning import diff_ik as diff_ik_mp
 import isaaclab_sensor_learning.tasks  # noqa: F401
 from isaaclab_sensor_learning.utils import usd_utils
-from isaaclab_sensor_learning.utils import quaternion_utils as qutils
 
 import data_utils.data_logger as data_logger
 import data_utils.pose_generator as pose_generator

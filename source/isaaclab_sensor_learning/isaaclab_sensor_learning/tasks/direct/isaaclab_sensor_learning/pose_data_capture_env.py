@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 import numpy as np
+from rich import inspect
 import torch
 from collections.abc import Sequence
 
 
-from isaaclab.assets import Articulation, AssetBase
+from isaaclab.assets import Articulation, AssetBase, RigidObject, RigidObjectCfg
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
+from isaaclab.controllers import pink_ik
 from isaaclab.envs import DirectRLEnv
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.markers import VisualizationMarkers
@@ -21,18 +23,20 @@ import isaaclab.sim as sim_utils
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import sample_uniform, subtract_frame_transforms
 
-import isaaclab_sensor_learning as pdc
+from isaaclab_sensor_learning import URDF_DIR, USD_DIR
+from isaaclab_sensor_learning.controllers.limit_aware_ik import LimitAwareIK
 import isaaclab_sensor_learning.sensor.yaml_to_cfg as yaml_to_cfg
 import isaaclab_sensor_learning.sensor.rig_utils as rig_utils
 from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
 import isaaclab_sensor_learning.utils.usd_utils as usd_utils
-import isaaclab_sensor_learning.utils.quaternion_utils as qutils
+from isaaclab_tasks.manager_based.manipulation.pick_place.pickplace_gr1t2_env_cfg import PinkIKControllerCfg
+
 
 from .pose_data_capture_env_cfg import PoseDataCaptureEnvCfg
 
 # from pose_data_capture.sensor.yaml_to_cfg import rig_yaml_to_sensor_cfgs
 
-
+import pinocchio as pin
 import os
 
 
@@ -40,93 +44,62 @@ class PoseDataCaptureEnv(DirectRLEnv):
     cfg: PoseDataCaptureEnvCfg
 
     def __init__(self, cfg: PoseDataCaptureEnvCfg, render_mode: str | None = None, **kwargs):
-        self._curr_tree_mesh_prim = None
-        if not cfg.rig_yaml_path:
-            raise ValueError("cfg.rig_yaml_path must be set before instantiating PoseDataCaptureEnv.")
-
         # self._sensor_cfgs = yaml_to_cfg.rig_yaml_to_sensor_cfgs(rig_yaml_path=cfg.rig_yaml_path) # TODO: change to dict later
         self._rig_cfg = yaml_to_cfg.load_rig_yaml(rig_yaml_path=cfg.rig_yaml_path)
-        
-
-        self.camera_poses: np.ndarray
-        self.curr_pose_idx = 0
-        self._new_action = False
-
-        self.sensors = {}
-        self.sensor_groups = {
-            "camera": [],
-            "lidar": [],
-            "tof": [],
-        }
-
 
         super().__init__(cfg, render_mode, **kwargs)
 
-        self.robot_entity_cfg = SceneEntityCfg(name="robot", joint_names=[".*"], body_names=["wrist_3_link"])
+        self.robot_entity_cfg = SceneEntityCfg(name="robot", joint_names=[".*"], body_names=["ur10e__wrist_3_link"])
         self.robot_entity_cfg.resolve(self.scene)
-
         joint_pos = self.robot.data.default_joint_pos.clone()
         joint_vel = self.robot.data.default_joint_vel.clone()
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel)
         self.robot.reset()
+
+        # print(self.robot_entity_cfg.joint_ids)
+        self.limit_aware_ik_controller = LimitAwareIK(
+            ik_controller=self.ik_controller,
+            num_envs=self.cfg.num_envs,
+            num_joints=len(self.robot_entity_cfg.joint_ids),
+            device=self.device,
+        )
+        self.limit_aware_ik_controller.reset()
+
+
         return
 
     def _setup_scene(self):
-        # add ground plane
-        spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
-        # clone and replicate
-        self.scene.clone_environments(copy_from_source=False)
-
-        # trees
-        self.prim = sim_utils.spawn_multi_usd_file(
-            prim_path="/World/envs/env_.*/tree",
-            cfg=self.cfg.trees_collection_cfg,
-            translation=(0.0, 1.0, 0.0),
-            orientation=qutils.wxyz_to_xyzw(np.array([0.0, 0.0, 0.0, 1.0])),
-        )
-
         # robot
-        self.cfg.robot_cfg.init_state.pos = (0.0, 0.0, 0.0)
-        self.cfg.robot_cfg.init_state.rot = tuple(qutils.xyzw_to_wxyz(np.asarray([0.0, 0.0, 0.0, 1.0])))
-        self.robot = Articulation(cfg=self.cfg.robot_cfg)
-        self.scene.articulations["robot"] = self.robot
+        self.robot = self.scene["robot"]
 
         # add sensors # TODO: Put in reset function and call that? No, that is only for epochs, i need full evolutionary runs
         self.rig_generator = RigGenerator(rig_sensor_cfgs=self._rig_cfg["sensors"])
-        # self._rig_cfg = self.rig_generator.generate_rig()
         self.eef_layout_dict = {
             # "sensor_model": "filler_sensor_model",
             "layout_type": "sphere",
             "radius": 0.2,
-            "colatitude": 25, # degrees
+            "colatitude": 25,  # degrees
             "max_iter": 200,
             "tol": 1e-6,
-            "mesh_points": 8000
+            "mesh_points": 8000,
         }
         self.eef_sensor_layout = self.rig_generator.generate_eef_layout(layout_dict=self.eef_layout_dict)
         self.eef_sensor_cfgs = self.rig_generator.generate_eef_sensor_cfgs(sensor_layout=self.eef_sensor_layout)
         self.eef_sensors = self.rig_generator.generate_rig(sensor_cfgs=self.eef_sensor_cfgs)
-
-
-        # for sensor_name, sensor_dict in self._sensor_cfgs.items():
-        #     sensor_cfg = sensor_dict["cfg"]
-        #     if isinstance(sensor_cfg, CameraCfg):
-        #         self.sensors[sensor_name] = Camera(cfg=sensor_cfg)
-        #     elif isinstance(sensor_cfg, MultiMeshRayCasterCameraCfg):
-        #         self.sensors[sensor_name] = MultiMeshRayCasterCamera(cfg=sensor_cfg)
-        #     else:
-        #         raise ValueError(f"Unsupported sensor config type: {type(sensor_cfg)} for sensor '{sensor_name}'")
-        #     self.sensor_groups[sensor_dict["type"]].append(sensor_name) # Need to move this to parsing function so that sensor can be grouped and correct offsets can be applied
+        # TODO: Add lidar in generate_rig
+        self.sensors = self.eef_sensors
 
         # controllers
         self.ik_controller = DifferentialIKController(
             cfg=DifferentialIKControllerCfg(
-                command_type="pose", use_relative_mode=False, ik_method="dls", ik_params={"lambda_val": 0.0001}
+                command_type="pose", use_relative_mode=False, ik_method="dls", ik_params={"lambda_val": 0.01}
             ),
             num_envs=self.cfg.num_envs,
             device=self.device,
         )
         self.ik_controller.reset()
+        
+
 
         # actions
         self.actions = torch.zeros(
@@ -145,33 +118,49 @@ class PoseDataCaptureEnv(DirectRLEnv):
         return
 
     def _apply_action(self) -> None:
-        self.ik_controller.set_command(self.actions) # (N, 7) target pose in world frame
+        self.ik_controller.reset()
+        self.ik_controller.set_command(self.actions)  # (N, 7discrete_poses.shape[0]) target pose in world frame
 
+        joint_limits = self.robot.data.soft_joint_pos_limits.torch
         if self.robot.is_fixed_base:
             eef_jacobi_idx = self.robot_entity_cfg.body_ids[0] - 1
         else:
             eef_jacobi_idx = self.robot_entity_cfg.body_ids[0]
+        jacobi_joint_ids = [j + self.robot.num_base_dofs for j in self.robot_entity_cfg.joint_ids]
+        jacobians = self.robot.data.body_link_jacobian_w.torch[:, eef_jacobi_idx, :, jacobi_joint_ids]
+        eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
+        root_pose_w = self.robot.data.root_pose_w.torch
+        joint_pos = self.robot.data.joint_pos.torch[:, self.robot_entity_cfg.joint_ids]
 
-        # print("body_names:", self.robot.data.body_names)
-        # print("body_ids:", self.robot_entity_cfg.body_ids)
-        # print("jacobians shape:", self.robot.root_physx_view.get_jacobians().shape)
-
-        jacobians = self.robot.root_physx_view.get_jacobians()[:, eef_jacobi_idx, :, self.robot_entity_cfg.joint_ids]
-        eef_pose_w = self.robot.data.body_pose_w[:, self.robot_entity_cfg.body_ids[0]]
-        root_pose_w = self.robot.data.root_pose_w
-        joint_pos = self.robot.data.joint_pos[:, self.robot_entity_cfg.joint_ids]
-        # compute frame in base frame
+        # Primay task: compute joint position target from desired end-effector pose
         eef_pos_b, eef_quat_b = subtract_frame_transforms(
             root_pose_w[:, 0:3], root_pose_w[:, 3:7], eef_pose_w[:, 0:3], eef_pose_w[:, 3:7]
         )
-        joint_pos_des = self.ik_controller.compute(eef_pos_b, eef_quat_b, jacobians, joint_pos)
+        # joint_pos_des = self.ik_controller.compute(eef_pos_b, eef_quat_b, jacobians, joint_pos)
+
+        joint_pos_des = self.limit_aware_ik_controller.solve(
+            eef_pos_b, eef_quat_b, jacobians, joint_pos, joint_limits, max_iters=10, eps=1e-3
+        )
+
+        # print("target joint pos:\n", joint_pos_des)
+        # print("Joint pos:\n", joint_pos)
+        # print("target pose:\n", self.actions)
+        # print("eef pose:\n", eef_pose_w)
+        # print("eef_pose_b:\n", torch.cat([eef_pos_b, eef_quat_b], dim=-1))
+        
+        # print("joint limits:\n", joint_limits)
+        
         # apply actions
-        self.robot.set_joint_position_target(joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
+        self.robot.set_joint_position_target_index(target=joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
         self.scene.write_data_to_sim()
-        self.scene.update(1/120)
+        self.scene.update(self.sim.get_physics_dt())
+
+        # joint_pos_des2 = torch.tensor(joint_pos_des2[torch.newaxis, :], dtype=torch.float32, device=self.device)
+
+        # self.robot.write_joint_state_to_sim(joint_pos_des, torch.zeros(size=joint_pos_des.shape, device=joint_pos_des.device))
 
         # update marker poses
-        eef_pose_w = self.robot.data.body_pose_w[:, self.robot_entity_cfg.body_ids[0], 0:7]
+        eef_pose_w = self.robot.data.body_state_w.torch[:, self.robot_entity_cfg.body_ids[0], 0:7]
         self.eef_markers.visualize(eef_pose_w[:, 0:3], eef_pose_w[:, 3:7])
         self.goal_markers.visualize(self.actions[:, 0:3] + self.scene.env_origins, self.actions[:, 3:7])
 
