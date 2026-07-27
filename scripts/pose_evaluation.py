@@ -44,7 +44,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 # from isaaclab_sensor_learning.motion_planning import diff_ik as diff_ik_mp
 import isaaclab_sensor_learning.tasks  # noqa: F401
-from isaaclab_sensor_learning.utils import usd_utils
+from isaaclab_sensor_learning.utils import h5py_utils, usd_utils
 
 import data_utils.data_logger as data_logger
 import data_utils.pose_generator as pose_generator
@@ -52,6 +52,9 @@ import pprint as pp
 import os
 
 import time
+import h5py as h5
+
+import pprint as pp
 
 
 def main():
@@ -64,61 +67,33 @@ def main():
     # reset environment
     env.reset()
     robot = env.unwrapped.robot
+    num_envs = env.unwrapped.cfg.num_envs
+    # env.unwrapped.goal_pose = torch.zeros((env.unwrapped.cfg.num_envs, 7), dtype=torch.float32, device=env.unwrapped.device)
 
-    # def get_tf(source_frame, target_frame, pose, quat):
-    #     if source_frame == target_frame:
-    #         return torch.cat([pose, quat], dim=-1)
-    #     source_pos, source_quat = pose, quat
-    #     print(f"Source pos: {source_pos}, source quat: {source_quat}")
+    # load poses from file
+    with h5.File("/home/luke/IsaacLab/source/isaaclab-sensor-learning/data/SL-PDC_20260721_140000.h5", "r") as f:
+        trial_dict = h5py_utils.h5_to_dict(f)
 
-    #     target_pos, target_quat = (
-    #         robot.data.body_pos_w[:, robot.find_bodies(target_frame)[0]],
-    #         robot.data.body_quat_w[:, robot.find_bodies(target_frame)[0]],
-    #     )
-    #     print(f"Target pos: {target_pos}, target quat: {target_quat}")
-    #     relative_tf = math_utils.subtract_frame_transforms(source_pos, source_quat, target_pos, target_quat)
-    #     return relative_tf
+    for key, val in trial_dict['trees'].items():
+        pp.pprint(val['attrs'])
+    
+        
 
-    # reset joint state
-    joint_pos = robot.data.default_joint_pos.clone()
-    joint_vel = robot.data.default_joint_vel.clone()
-    robot.write_joint_state_to_sim(joint_pos, joint_vel)
-    robot.reset()
-    # ik_controller.reset()
-    # env.unwrapped.sim.step()
+    goal_pose = torch.zeros((num_envs, 7), dtype=torch.float32)
 
-    eef_goals = [
-        [0.5, 0.5, 0.7, 0.707, 0, 0.707, 0],
-        [0.5, -0.4, 0.6, 0.707, 0.707, 0.0, 0.0],
-        [0.5, 0, 0.5, 0.0, 1.0, 0.0, 0.0],
-    ]
-
-    idx = 0
-    # # simulate environment
+    # simulate environment
     while simulation_app.is_running():
         with torch.inference_mode():
+            # check if the robot's end-effector is close to the goal pose
+            robot_base_w = robot.data.root_pose_w.torch
+            robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
+            # position
+            robot_positions_b = torch.subtract(robot_eef_w[:, 0:3], robot_base_w[:, 0:3])
+            positions_close = torch.isclose(robot_positions_b[:, 0:3], goal_pose[:, 0:3], atol=0.002)
 
-            if torch.allclose(
-                robot.data.body_pos_w[:, robot.find_bodies("wrist_3_link")[0]],
-                torch.tensor([eef_goals[idx][0:3]], device=env.unwrapped.device),
-                atol=0.01,
-            ) and torch.allclose(
-                robot.data.body_quat_w[:, robot.find_bodies("wrist_3_link")[0]],
-                torch.tensor([eef_goals[idx][3:7]], device=env.unwrapped.device),
-                atol=0.01,
-            ):
-                print(f"Reached goal {idx}!")
-                idx = (idx + 1) % len(eef_goals)
-                print(f"Moving to goal {idx}...")
-                time.sleep(5)
-
-            print(robot.data.body_pos_w[:, robot.find_bodies("wrist_3_link")[0]])
-            print(robot.data.body_quat_w[:, robot.find_bodies("wrist_3_link")[0]])
-
-            # actions = torch.cat([target_pos, target_quat], dim=-1)
-            actions = torch.tensor([eef_goals[idx]], device=env.unwrapped.device)
+            actions = ...
             observations, rewards, terminated, truncated, info = env.step(actions)
-
+            break
     return
 
 

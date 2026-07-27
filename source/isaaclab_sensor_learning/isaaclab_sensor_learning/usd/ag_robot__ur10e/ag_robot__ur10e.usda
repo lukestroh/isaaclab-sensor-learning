@@ -1,11 +1,11 @@
 #usda 1.0
 (
-    defaultPrim = "pruning_robot"
+    defaultPrim = "robot"
     metersPerUnit = 1
     upAxis = "Z"
 )
 
-def Xform "pruning_robot" (
+def Xform "robot" (
     variants = {
         string Physics = "PhysX"
         string Robot = "Robot"

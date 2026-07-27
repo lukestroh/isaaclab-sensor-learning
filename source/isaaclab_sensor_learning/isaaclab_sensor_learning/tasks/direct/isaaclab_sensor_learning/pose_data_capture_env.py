@@ -21,7 +21,7 @@ from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg
 import isaaclab.sim as sim_utils
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
-from isaaclab.utils.math import sample_uniform, subtract_frame_transforms
+import isaaclab.utils.math as math_utils
 
 from isaaclab_sensor_learning import URDF_DIR, USD_DIR
 from isaaclab_sensor_learning.controllers.limit_aware_ik import LimitAwareIK
@@ -31,13 +31,11 @@ from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
 import isaaclab_sensor_learning.utils.usd_utils as usd_utils
 from isaaclab_tasks.manager_based.manipulation.pick_place.pickplace_gr1t2_env_cfg import PinkIKControllerCfg
 
+from pxr import Usd, UsdGeom, Sdf, Gf
 
 from .pose_data_capture_env_cfg import PoseDataCaptureEnvCfg
 
-# from pose_data_capture.sensor.yaml_to_cfg import rig_yaml_to_sensor_cfgs
-
-import pinocchio as pin
-import os
+import pprint as pp
 
 
 class PoseDataCaptureEnv(DirectRLEnv):
@@ -56,6 +54,16 @@ class PoseDataCaptureEnv(DirectRLEnv):
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel)
         self.robot.reset()
 
+        # controllers
+        self.ik_controller = DifferentialIKController(
+            cfg=DifferentialIKControllerCfg(
+                command_type="pose", use_relative_mode=False, ik_method="dls", ik_params={"lambda_val": 0.01}
+            ),
+            num_envs=self.cfg.num_envs,
+            device=self.device,
+        )
+        self.ik_controller.reset()
+
         # print(self.robot_entity_cfg.joint_ids)
         self.limit_aware_ik_controller = LimitAwareIK(
             ik_controller=self.ik_controller,
@@ -65,12 +73,13 @@ class PoseDataCaptureEnv(DirectRLEnv):
         )
         self.limit_aware_ik_controller.reset()
 
-
+        # actions
+        self.actions = torch.zeros(
+            size=(self.num_envs, self.ik_controller.action_dim), dtype=torch.float32, device=self.device
+        )  # (N, 7) target pose in world frame
         return
 
     def _setup_scene(self):
-        # robot
-        self.robot = self.scene["robot"]
 
         # add sensors # TODO: Put in reset function and call that? No, that is only for epochs, i need full evolutionary runs
         self.rig_generator = RigGenerator(rig_sensor_cfgs=self._rig_cfg["sensors"])
@@ -85,26 +94,18 @@ class PoseDataCaptureEnv(DirectRLEnv):
         }
         self.eef_sensor_layout = self.rig_generator.generate_eef_layout(layout_dict=self.eef_layout_dict)
         self.eef_sensor_cfgs = self.rig_generator.generate_eef_sensor_cfgs(sensor_layout=self.eef_sensor_layout)
+
+        self.robot = self.scene.articulations["robot"]
+
+
+        # add sensors to the scene
         self.eef_sensors = self.rig_generator.generate_rig(sensor_cfgs=self.eef_sensor_cfgs)
         # TODO: Add lidar in generate_rig
-        self.sensors = self.eef_sensors
-
-        # controllers
-        self.ik_controller = DifferentialIKController(
-            cfg=DifferentialIKControllerCfg(
-                command_type="pose", use_relative_mode=False, ik_method="dls", ik_params={"lambda_val": 0.01}
-            ),
-            num_envs=self.cfg.num_envs,
-            device=self.device,
-        )
-        self.ik_controller.reset()
-        
+        self.scene.sensors.update(self.eef_sensors)
+        self.sensors = self.scene.sensors
 
 
-        # actions
-        self.actions = torch.zeros(
-            size=(self.num_envs, self.ik_controller.action_dim), dtype=torch.float32, device=self.device
-        )  # (N, 7) target pose in world frame
+        self.scene.clone_environments(copy_from_source=True)
 
         # markers
         frame_marker_cfg = FRAME_MARKER_CFG.copy()
@@ -133,14 +134,14 @@ class PoseDataCaptureEnv(DirectRLEnv):
         joint_pos = self.robot.data.joint_pos.torch[:, self.robot_entity_cfg.joint_ids]
 
         # Primay task: compute joint position target from desired end-effector pose
-        eef_pos_b, eef_quat_b = subtract_frame_transforms(
+        eef_pos_b, eef_quat_b = math_utils.subtract_frame_transforms(
             root_pose_w[:, 0:3], root_pose_w[:, 3:7], eef_pose_w[:, 0:3], eef_pose_w[:, 3:7]
         )
-        # joint_pos_des = self.ik_controller.compute(eef_pos_b, eef_quat_b, jacobians, joint_pos)
+        joint_pos_des = self.ik_controller.compute(eef_pos_b, eef_quat_b, jacobians, joint_pos)
 
-        joint_pos_des = self.limit_aware_ik_controller.solve(
-            eef_pos_b, eef_quat_b, jacobians, joint_pos, joint_limits, max_iters=10, eps=1e-3
-        )
+        # joint_pos_des = self.limit_aware_ik_controller.solve(
+        #     eef_pos_b, eef_quat_b, jacobians, joint_pos, joint_limits, max_iters=10, eps=1e-3
+        # )
 
         # print("target joint pos:\n", joint_pos_des)
         # print("Joint pos:\n", joint_pos)
@@ -153,11 +154,32 @@ class PoseDataCaptureEnv(DirectRLEnv):
         # apply actions
         self.robot.set_joint_position_target_index(target=joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
         self.scene.write_data_to_sim()
-        self.scene.update(self.sim.get_physics_dt())
+        # self.sim.forward()
+        # self.sim.render()
+        # self.sim.step()
+        # self.scene.update(self.sim.get_physics_dt())
+
+        # manually update sensor positions to ensure they are in sync with the robot's end-effector
+        for sensor in self.sensors.values():
+            sensor_cfg = sensor.cfg
+            parent_offset = sensor_cfg.offset
+            new_sensor_pos_w, new_sensor_quat_w = math_utils.combine_frame_transforms(
+                t01=eef_pose_w[:, 0:3],
+                q01=eef_pose_w[:, 3:7],
+                t12=torch.tensor(parent_offset.pos, device=self.device).unsqueeze(0).repeat(self.cfg.num_envs, 1),
+                q12=torch.tensor(parent_offset.rot, device=self.device).unsqueeze(0).repeat(self.cfg.num_envs, 1),
+            )
+            sensor.set_world_poses(positions=new_sensor_pos_w, orientations=new_sensor_quat_w)
+            # print(f"Sensor {sensor_cfg")
+            # print(parent_offset)
+            # sensor.set_world_poses()
 
         # joint_pos_des2 = torch.tensor(joint_pos_des2[torch.newaxis, :], dtype=torch.float32, device=self.device)
 
+        # Set angles directly (doesn't work?)
         # self.robot.write_joint_state_to_sim(joint_pos_des, torch.zeros(size=joint_pos_des.shape, device=joint_pos_des.device))
+        # self.robot.write_joint_position_to_sim_index(position=joint_pos_des)
+        # self.robot.reset()
 
         # update marker poses
         eef_pose_w = self.robot.data.body_state_w.torch[:, self.robot_entity_cfg.body_ids[0], 0:7]

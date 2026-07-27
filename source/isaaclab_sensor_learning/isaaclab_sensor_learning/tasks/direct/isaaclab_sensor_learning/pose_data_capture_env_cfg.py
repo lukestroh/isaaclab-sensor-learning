@@ -6,66 +6,30 @@
 from isaaclab.assets import AssetBaseCfg, ArticulationCfg, RigidObjectCfg, RigidObjectCollectionCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.sensors import CameraCfg
 from isaaclab.sim import (
-    ArticulationRootPropertiesCfg,
     SimulationCfg,
     RenderCfg,
     MultiUsdFileCfg,
-    SpawnerCfg,
-    DomeLightCfg,
-    MultiAssetSpawnerCfg,
-    UsdFileCfg,
-    RigidBodyPropertiesCfg,
-    CollisionPropertiesCfg,
-    PhysicsMaterialCfg,
+    RigidBodyBaseCfg
 )
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
-
-from isaaclab_assets.robots.universal_robots import UR10e_CFG
-from isaaclab_sensor_learning.articulations.ag_robot import AG_ROBOT_UR10e_CFG, AG_ROBOT_UR5e_CFG
 from isaaclab_newton.physics import NewtonCfg
 
-
 from isaaclab_sensor_learning import USD_DIR, URDF_DIR, TREES_DIR
+from isaaclab_sensor_learning.articulations.ag_robot import AG_ROBOT_UR10e_CFG, AG_ROBOT_UR5e_CFG
+from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
+from isaaclab_sensor_learning.tasks.direct.isaaclab_sensor_learning.sensor_learning_scene_cfg import SensorLearningSceneCfg
+
 import glob
 import os
-
-
-from isaaclab.controllers import pink_ik
 from pathlib import Path
-
-from isaaclab.actuators import ImplicitActuatorCfg
-
-
-@configclass
-class SensorLearningSceneCfg(InteractiveSceneCfg):
-    """
-    """
-
-    # terrain
-    terrain = TerrainImporterCfg(prim_path="/World/ground", terrain_type="plane", debug_vis=False)
-
-    # trees
-    trees = AssetBaseCfg(
-        prim_path="/World/envs/env_.*/tree",
-        spawn=MultiUsdFileCfg(
-            usd_path=glob.glob(os.path.join(TREES_DIR, "models", "*_uv.usda")),
-            random_choice=False,
-            rigid_props=RigidBodyPropertiesCfg(),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 2.5, 0.0)),
-    )
-
-    #  robot
-    robot: ArticulationCfg = AG_ROBOT_UR10e_CFG
-
-    # # lights # TODO: Remove for sim
-    # dome_light = AssetBaseCfg(prim_path="/World/Light", spawn=DomeLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0)))
 
 
 @configclass
 class PoseDataCaptureEnvCfg(DirectRLEnvCfg):
+    """Configuration for the pose data capture environment."""
     # env
     decimation = 2
     episode_length_s = 60.0
@@ -91,64 +55,7 @@ class PoseDataCaptureEnvCfg(DirectRLEnvCfg):
         env_spacing=5.0,
     )
 
-    
-
-    # pink_ik_cfg = pink_ik.PinkIKControllerCfg(
-    #     usd_path=os.path.join(USD_DIR, "ag_robot__ur10e", "ag_robot__ur10e.usda"),
-    #     urdf_path=os.path.join(URDF_DIR, "ag_robot", "ag_robot__ur10e.urdf"),
-    #     joint_names=[
-    #         "linear_slider__joint1",
-    #         "ur10e__shoulder_pan_joint",
-    #         "ur10e__shoulder_lift_joint",
-    #         "ur10e__elbow_joint",
-    #         "ur10e__wrist_1_joint",
-    #         "ur10e__wrist_2_joint",
-    #         "ur10e__wrist_3_joint"
-    #     ],        # mesh_path=os.path.join(MESH_DIR, "ag_robot__ur10e"),
-    #     all_joint_names=[
-    #         "linear_slider__joint1",
-    #         "ur10e__shoulder_pan_joint",
-    #         "ur10e__shoulder_lift_joint",
-    #         "ur10e__elbow_joint",
-    #         "ur10e__wrist_1_joint",
-    #         "ur10e__wrist_2_joint",
-    #         "ur10e__wrist_3_joint",
-    #     ],
-    #     num_hand_joints=0,
-    #     base_link_name="amiga__base",
-    #     show_ik_warnings=True,
-    #     fail_on_joint_limit_violation=False,
-    #     variable_input_tasks=[
-    #         pink_ik.FrameTaskCfg(
-    #             frame="ur10e__wrist_3_link",
-    #             position_cost=7000.0,  # [cost] / [m]
-    #             orientation_cost=8000.0,  # [cost] / [rad]
-    #             lm_damping=1.0,  # dampening for solver for step jumps
-    #             gain=1.0,
-    #         ),
-    #         # pink_ik.DampingTaskCfg(
-    #         #     cost=0.1,  # [cost] * [s] / [rad]
-    #         # ),
-    #         pink_ik.NullSpacePostureTaskCfg(
-    #             cost=2.0,
-    #             lm_damping=1.0,
-    #             controlled_frames=[
-    #                 "ur10e__wrist_3_link",
-    #             ],
-    #             controlled_joints=[
-    #                 "linear_slider__joint1",
-    #                 # "ur10e__shoulder_pan_joint",
-    #                 # "ur10e__shoulder_lift_joint",
-    #                 # "ur10e__elbow_joint",
-    #                 # "ur10e__wrist_1_joint",
-    #                 # "ur10e__wrist_2_joint",
-    #                 # "ur10e__wrist_3_joint",
-    #             ],
-    #         ),
-    #     ],
-    #     fixed_input_tasks=[],
-    # )
-
+    # rig
     rig_yaml_path: str = (
         Path(__file__).parent.parent.parent.parent / "config/rigs/test_rig0.yaml"
     )  # NOTE: Standin for now, will be replaced by arguments from evolutionary outputs

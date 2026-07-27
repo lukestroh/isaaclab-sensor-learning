@@ -129,7 +129,8 @@ class DataLogger:
                 env_group.attrs["tree_namespace"] = tree_info["tree_namespace"]
                 env_group.attrs["tree_type"] = tree_info["tree_type"]
                 env_group.attrs["tree_id"] = tree_info["tree_id"]
-                env_group.attrs["pose"] = tree_info["pose"]
+                env_group.attrs["position"] = tree_info["position"]
+                env_group.attrs["orientation"] = tree_info["orientation"]
         return
 
     def save_sensor_metadata(self, sensor_metadata: dict, n_poses: int, num_envs: int) -> None:
@@ -209,7 +210,7 @@ class DataLogger:
     def _reshape_tensor_to_numpy(self, tensors: list[torch.Tensor], shape: tuple = (0, 1)) -> np.ndarray:
         return torch.stack(tensors).transpose(*shape).detach().cpu().numpy()
 
-    def save_observations(self, observations: CameraData, poses: torch.Tensor, idx: int, last_obs: bool = False) -> None:
+    def save_observations(self, observations: dict[str, CameraData], poses: torch.Tensor, idx: int, last_obs: bool = False) -> None:
         """Save observations and poses to HDF5 file. Flushes buffers every N observations or if last_obs is True."""
         # print(poses.shape)
 
@@ -219,7 +220,7 @@ class DataLogger:
         self.idx_buf.append(idx)
 
         # append sensor data to buffers
-        for i, (sensor_name, sensor_data) in enumerate(observations.items()):
+        for sensor_name, sensor_data in observations.items():
             self.sensor_obs_buf[sensor_name]["position_w"].append(sensor_data.pos_w.torch)
             self.sensor_obs_buf[sensor_name]["quat_w_world"].append(sensor_data.quat_w_world.torch)
             self.sensor_obs_buf[sensor_name]["intrinsic_matrix"].append(sensor_data.intrinsic_matrices.torch)
@@ -234,11 +235,9 @@ class DataLogger:
             self.sensor_obs_buf[sensor_name]["normals"].append(sensor_data.output["normals"].torch)
 
         flush = False
-        for sensor_name in observations.keys():
-
-            len_buffers = len(self.sensor_obs_buf[sensor_name]["position_w"])
-            # print(self.sensor_obs_buf[sensor_name]["position_w"][0].warp)
-            if len_buffers >= 2 or last_obs:  # flush every N observations or if it's the last observation
+        len_buffers = len(self.sensor_obs_buf[sensor_name]["position_w"])
+        if len_buffers >= 2 or last_obs:  # flush every N observations or if it's the last observation
+            for sensor_name in observations.keys():
                 flush = True
                 # reshape data to (num_envs, n_poses, ...) and save to HDF5
                 chunked_positions = self._reshape_tensor_to_numpy(self.sensor_obs_buf[sensor_name]["position_w"])
@@ -271,16 +270,19 @@ class DataLogger:
                 # print(chunked_depths.shape)
                 # print(chunked_depths)
 
+                start_idx = self.idx_buf[0]
+                end_idx = self.idx_buf[-1] + 1  # +1 because slicing
+
                 # Save the buffered observations
                 with h5.File(self.datafile_path, "a") as file:
                     sensor_group = file.require_group(f"sensors/{sensor_name}")
-                    sensor_group["pose"][:, self.idx_buf[0]:self.idx_buf[-1] + 1, :] = chunked_poses
-                    sensor_group["intrinsic_matrix"][:, self.idx_buf[0]:self.idx_buf[-1] + 1, :] = chunked_intrinsics
-                    sensor_group["rgb"][:, self.idx_buf[0]:self.idx_buf[-1] + 1, :] = chunked_rgbs
-                    sensor_group["depth"][:, self.idx_buf[0]:self.idx_buf[-1] + 1, :] = chunked_depths
-                    sensor_group["instance_segmentation"][:, self.idx_buf[0]:self.idx_buf[-1] + 1, :] = chunked_instance_segs
-                    sensor_group["semantic_segmentation"][:, self.idx_buf[0]:self.idx_buf[-1] + 1, :] = chunked_semantic_segs
-                    sensor_group["normals"][:, self.idx_buf[0]:self.idx_buf[-1] + 1, :] = chunked_normals
+                    sensor_group["pose"][:, start_idx:end_idx, :] = chunked_poses
+                    sensor_group["intrinsic_matrix"][:, start_idx:end_idx, :] = chunked_intrinsics
+                    sensor_group["rgb"][:, start_idx:end_idx, :] = chunked_rgbs
+                    sensor_group["depth"][:, start_idx:end_idx, :] = chunked_depths
+                    sensor_group["instance_segmentation"][:, start_idx:end_idx, :] = chunked_instance_segs
+                    sensor_group["semantic_segmentation"][:, start_idx:end_idx, :] = chunked_semantic_segs
+                    sensor_group["normals"][:, start_idx:end_idx, :] = chunked_normals
 
         if flush:
             # Save the actual poses
@@ -288,14 +290,27 @@ class DataLogger:
             # print(self.row_cursor, end, stacked_poses.shape)
             with h5.File(self.datafile_path, "a") as file:
                 pose_group = file.require_group("poses/actual_poses")
-                pose_group["eef_poses"][:, self.idx_buf[0]:self.idx_buf[-1] + 1, :] = stacked_poses
+                pose_group["eef_poses"][:, start_idx:end_idx, :] = stacked_poses
                 self.actual_poses_buf.clear()
                 self.idx_buf.clear()
             flush = False
 
             # self.row_cursor += len_buffers
         return
+    
+    def save_skipped_poses(self, skipped_poses: list[int]) -> None:
+        """Save the list of skipped poses to the HDF5 file."""
+        with h5.File(self.datafile_path, "a") as file:
+            pose_group = file.require_group("poses/actual_poses")
+            pose_group.create_dataset(
+                name="skipped_poses",
+                data=np.array(skipped_poses, dtype=np.int32),
+                compression="gzip", 
+            )
+        return
 
     def _flush_buffers(self):
         # This method can be used to implement any additional flushing logic if needed
         pass
+
+

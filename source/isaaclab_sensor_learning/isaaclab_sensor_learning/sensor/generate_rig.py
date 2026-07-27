@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg, OffsetCfg
+from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg
 from isaaclab.sim.spawners.sensors import PinholeCameraCfg
 import isaaclab.utils.math as math_utils
 
@@ -102,15 +102,17 @@ class RigGenerator:
                     rot=math_utils.matrix_from_quat(torch.tensor(sensor_rig_pose[3:7], dtype=torch.float32)),
                 )
                 full_offset_mat = sensor_offset_mat @ internal_offset_mat
-                full_offset_pos, full_offset_quat = math_utils.unmake_pose(full_offset_mat)
-                offset_cfg = OffsetCfg()
-                offset_cfg.pos = full_offset_pos.tolist()
-                offset_cfg.quat = full_offset_quat.tolist()
-                offset_cfg.convention = "ros"
+                full_offset_pos, full_offset_rot_mat = math_utils.unmake_pose(full_offset_mat)
+                full_offset_quat = math_utils.quat_from_matrix(full_offset_rot_mat)
+                # print(full_offset_quat)
+                offset_cfg = CameraCfg.OffsetCfg()
+                offset_cfg.pos = tuple(full_offset_pos.tolist())
+                offset_cfg.rot = tuple(full_offset_quat.tolist())
+                # offset_cfg.convention = "ros"
 
-                # prim_path = f"/World/envs/env_.*/robot/wrist_3_link/tool0/{sensor_name}"
                 # prim_path = f"/World/envs/env_.*/robot/Geometry/amiga__base/amiga__body/amiga__tool0/linear_slider__base/linear_slider__base_link/linear_slider__moving_base/linear_slider__flange/linear_slider__tool0/ur10e__base_link/ur10e__base_link_inertia/ur10e__shoulder_link/ur10e__upper_arm_link/ur10e__forearm_link/ur10e__wrist_1_link/ur10e__wrist_2_link/ur10e__wrist_3_link/ur10e__flange/ur10e__tool0/{sensor_name}"
                 prim_path = f"/World/envs/env_.*/robot/ur10e__tool0/{sensor_name}"
+
                 # Create sensor config
                 sensor_cfgs[sensor_name] = {
                     "type": sensor_type,
@@ -125,14 +127,14 @@ class RigGenerator:
                                 width=depth_sensor_metadata["width"],
                                 height=depth_sensor_metadata["height"],
                                 degrees=True,
-                            ).flatten(),
+                            ).flatten().tolist(),
                             width=depth_sensor_metadata["width"],
                             height=depth_sensor_metadata["height"],
                             clipping_range=(depth_sensor_metadata["z_near"], depth_sensor_metadata["z_far"]),
                         ),
                         depth_clipping_behavior="max",
                         offset=offset_cfg,
-                        update_period=(1 / sensor_metadata["data_rate_hz"]),
+                        update_period=float(1 / sensor_metadata["data_rate_hz"]),
                         update_latest_camera_pose=True,
                         debug_vis=True,
                     ),

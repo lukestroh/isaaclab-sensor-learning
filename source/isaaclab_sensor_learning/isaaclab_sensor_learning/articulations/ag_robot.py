@@ -14,10 +14,9 @@ AG_ROBOT_UR5e_CFG = ArticulationCfg(
             disable_gravity=False,
             max_depenetration_velocity=5.0,
         ),
-        articulation_props=sim_utils.schemas.ArticulationRootBaseCfg(
-            articulation_enabled=True,
-            # fix_root_link=True
-        ),
+        # articulation_props=sim_utils.schemas.ArticulationRootBaseCfg(
+        #     articulation_enabled=True,
+        # ),
         activate_contact_sensors=False,
     ),
     init_state=ArticulationCfg.InitialStateCfg(
@@ -121,7 +120,7 @@ AG_ROBOT_UR10e_CFG = ArticulationCfg(
             joint_names_expr=["linear_slider__joint1"],
             effort_limit_sim=87.0,
             velocity_limit=0.4,
-            stiffness=10000.0,
+            stiffness=40000.0,
             damping=5000.0
         ),
         "shoulder_pan": ImplicitActuatorCfg(
