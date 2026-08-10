@@ -34,7 +34,6 @@ class ViewUSDEnv(DirectRLEnv):
         return
 
     def _apply_action(self) -> None:
-        
 
         return
 

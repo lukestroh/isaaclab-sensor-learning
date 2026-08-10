@@ -5,15 +5,12 @@
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sim import (
-    SimulationCfg,
-    RenderCfg,
-    DomeLightCfg
-)
+from isaaclab.sim import SimulationCfg, RenderCfg, DomeLightCfg
 from isaaclab.utils import configclass
 from isaaclab.terrains import TerrainImporterCfg
 
 import isaaclab_sensor_learning.utils.usd_utils as usd_utils
+
 # from pose_data_capture.sensor.yaml_to_cfg import rig_yaml_to_sensor_cfgs
 import isaaclab.sim as sim_utils
 from isaaclab_sensor_learning.articulations.linear_slider import LINEAR_SLIDER_CFG
@@ -26,12 +23,13 @@ import os
 
 @configclass
 class ViewUSDSceneCfg(InteractiveSceneCfg):
-     # terrain
+    # terrain
     terrain = TerrainImporterCfg(prim_path="/World/ground", terrain_type="plane", debug_vis=False)
 
     dome_light = AssetBaseCfg(prim_path="/World/Light", spawn=DomeLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0)))
 
     robot = AG_ROBOT_CFG
+
 
 @configclass
 class ViewUSDEnvCfg(DirectRLEnvCfg):

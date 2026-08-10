@@ -30,7 +30,6 @@ import isaaclab_sensor_learning.tasks  # noqa: F401
 from isaaclab_sensor_learning.utils import usd_utils
 
 
-
 import os
 import pprint as pp
 

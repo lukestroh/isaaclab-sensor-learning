@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from turtle import update
+
 import h5py as h5
 import os
 from datetime import datetime as dt
@@ -19,32 +21,34 @@ class DataLogger:
         self.idx_buf = []
         # self.row_cursor = 0
         self.flush_every = None
+
+        self.labels_dict = {"semantic_labels": {}, "instance_labels": {}}
         return
 
-    def _compute_flush_every(self, observations: CameraData) -> dict[str, int]:
-        MIN_FLUSH = 16
-        MAX_FLUSH = 8192
+    # def _compute_flush_every(self, observations: CameraData) -> dict[str, int]:
+    #     MIN_FLUSH = 16
+    #     MAX_FLUSH = 8192
 
-        flush_every = {}
-        for sensor_name, sensor_data in observations.items():
-            fields = {
-                "position_w": sensor_data.pos_w,
-                "quat_w_world": sensor_data.quat_w_world,
-                "intrinsic_matrix": sensor_data.intrinsic_matrices,
-                "rgb": sensor_data.output["rgb"],
-                "depth": sensor_data.output["depth"],
-                "instance_segmentation": sensor_data.output["instance_segmentation_fast"],
-                "semantic_segmentation": sensor_data.output["semantic_segmentation"],
-                "normals": sensor_data.output["normals"],
-            }
+    #     flush_every = {}
+    #     for sensor_name, sensor_data in observations.items():
+    #         fields = {
+    #             "position_w": sensor_data.pos_w,
+    #             "quat_w_world": sensor_data.quat_w_world,
+    #             "intrinsic_matrix": sensor_data.intrinsic_matrices,
+    #             "rgb": sensor_data.output["rgb"],
+    #             "depth": sensor_data.output["depth"],
+    #             "instance_segmentation": sensor_data.output["instance_segmentation_fast"],
+    #             "semantic_segmentation": sensor_data.output["semantic_segmentation"],
+    #             "normals": sensor_data.output["normals"],
+    #         }
 
-            total_bytes_per_entry = sum(t.numel() * t.element_size() for t in fields.values())
-            n = max(MIN_FLUSH, min(self.TARGET_CHUNK_BYTES // total_bytes_per_entry, MAX_FLUSH))
-            flush_every[sensor_name] = n
+    #         total_bytes_per_entry = sum(t.numel() * t.element_size() for t in fields.values())
+    #         n = max(MIN_FLUSH, min(self.TARGET_CHUNK_BYTES // total_bytes_per_entry, MAX_FLUSH))
+    #         flush_every[sensor_name] = n
 
-            print(f"[DataLogger] {sensor_name}: {total_bytes_per_entry/1024:.1f} KB/entry → flush_every={n}")
+    #         print(f"[DataLogger] {sensor_name}: {total_bytes_per_entry/1024:.1f} KB/entry → flush_every={n}")
 
-        return flush_every
+    #     return flush_every
 
     def _get_camera_observation_buffer(self) -> dict:
         buf = {
@@ -73,6 +77,11 @@ class DataLogger:
         return file_path, trial_name
 
     def save_trial_metadata(self, trial_metadata: dict) -> None:
+        # Create labels_dict for each environment to store semantic and instance labels
+        for i in range(trial_metadata["num_envs"]):
+            self.labels_dict["instance_labels"][f"env_{i}"] = {}
+
+        # Save trial metadata to HDF5 file
         with h5.File(self.datafile_path, "w") as file:
             file.attrs["trial_name"] = trial_metadata["trial_name"]
             file.attrs["num_envs"] = trial_metadata["num_envs"]
@@ -208,9 +217,12 @@ class DataLogger:
         return tuple([entries_per_chunk] + list(data_shape))
 
     def _reshape_tensor_to_numpy(self, tensors: list[torch.Tensor], shape: tuple = (0, 1)) -> np.ndarray:
+        """Reshape a tensor of (n_poses, n_envs, ...) to numpy array of shape (n_envs, n_poses, ...)."""
         return torch.stack(tensors).transpose(*shape).detach().cpu().numpy()
 
-    def save_observations(self, observations: dict[str, CameraData], poses: torch.Tensor, idx: int, last_obs: bool = False) -> None:
+    def save_pose_observations(
+        self, observations: dict[str, CameraData], poses: torch.Tensor, idx: int, last_obs: bool = False
+    ) -> None:
         """Save observations and poses to HDF5 file. Flushes buffers every N observations or if last_obs is True."""
         # print(poses.shape)
 
@@ -218,6 +230,18 @@ class DataLogger:
         # print(f"POSES: ", poses.detach().cpu().numpy())
         self.actual_poses_buf.append(poses.detach().cpu().numpy())
         self.idx_buf.append(idx)
+
+        # add semantic and instance labels to labels_dict
+        for sensor_name, sensor_data in observations.items():
+            semantic_labels_dict = sensor_data.info["semantic_segmentation"]
+            instance_labels_dict = sensor_data.info["instance_segmentation_fast"]
+            for rgba_id, label in instance_labels_dict["idToLabels"].items():
+                if label not in ["BACKGROUND", "UNLABELLED"]:  # Does isaac sim have a typo??
+                    env_id = label.split("/")[3].split("_")[1]
+                    self.labels_dict["instance_labels"][f"env_{env_id}"][rgba_id] = label
+
+            for rgba_id, label_dict in semantic_labels_dict["idToLabels"].items():
+                self.labels_dict["semantic_labels"][rgba_id] = label_dict["class"]
 
         # append sensor data to buffers
         for sensor_name, sensor_data in observations.items():
@@ -236,7 +260,7 @@ class DataLogger:
 
         flush = False
         len_buffers = len(self.sensor_obs_buf[sensor_name]["position_w"])
-        if len_buffers >= 2 or last_obs:  # flush every N observations or if it's the last observation
+        if len_buffers >= 1 or last_obs:  # flush every N observations or if it's the last observation
             for sensor_name in observations.keys():
                 flush = True
                 # reshape data to (num_envs, n_poses, ...) and save to HDF5
@@ -265,11 +289,6 @@ class DataLogger:
                 self.sensor_obs_buf[sensor_name]["semantic_segmentation"].clear()
                 self.sensor_obs_buf[sensor_name]["normals"].clear()
 
-                # end = self.row_cursor + len_buffers
-                # print(f"\n[DataLogger] {self.idx_buf}")
-                # print(chunked_depths.shape)
-                # print(chunked_depths)
-
                 start_idx = self.idx_buf[0]
                 end_idx = self.idx_buf[-1] + 1  # +1 because slicing
 
@@ -287,17 +306,16 @@ class DataLogger:
         if flush:
             # Save the actual poses
             stacked_poses = np.stack(self.actual_poses_buf, axis=1)  # shape: (num_envs, n_poses, 7)
-            # print(self.row_cursor, end, stacked_poses.shape)
             with h5.File(self.datafile_path, "a") as file:
                 pose_group = file.require_group("poses/actual_poses")
                 pose_group["eef_poses"][:, start_idx:end_idx, :] = stacked_poses
-                self.actual_poses_buf.clear()
-                self.idx_buf.clear()
+
+            self.actual_poses_buf.clear()
+            self.idx_buf.clear()
             flush = False
 
-            # self.row_cursor += len_buffers
         return
-    
+
     def save_skipped_poses(self, skipped_poses: list[int]) -> None:
         """Save the list of skipped poses to the HDF5 file."""
         with h5.File(self.datafile_path, "a") as file:
@@ -305,12 +323,24 @@ class DataLogger:
             pose_group.create_dataset(
                 name="skipped_poses",
                 data=np.array(skipped_poses, dtype=np.int32),
-                compression="gzip", 
+                compression="gzip",
             )
         return
 
-    def _flush_buffers(self):
-        # This method can be used to implement any additional flushing logic if needed
-        pass
+    def save_labels_dict(self) -> None:
+        """Save the labels_dict to the HDF5 file."""
+        with h5.File(self.datafile_path, "a") as file:
+            semantic_labels_group = file.require_group("trees/semantic_labels")
+            for rgba_id, label in self.labels_dict["semantic_labels"].items():
+                semantic_labels_group.attrs[str(rgba_id)] = label
 
+            for env_name, env_labels in self.labels_dict["instance_labels"].items():
+                tree_env_group = file.require_group(f"trees/{env_name}")
+                instance_labels_group = tree_env_group.require_group("instance_labels")
+                for rgba_id, label in env_labels.items():
+                    instance_labels_group.attrs[str(rgba_id)] = label
+        return
 
+    # def _flush_buffers(self):
+    #     # This method can be used to implement any additional flushing logic if needed
+    #     pass

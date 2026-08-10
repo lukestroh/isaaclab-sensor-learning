@@ -21,14 +21,11 @@ LINEAR_SLIDER_CFG = ArticulationCfg(
         activate_contact_sensors=False,
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos = (0.0, 0.0, 0.0),
-        rot = (0.0, 0.0, 0.0, 1.0),
-        joint_pos = {"linear_slider__joint1": 0.0}
+        pos=(0.0, 0.0, 0.0), rot=(0.0, 0.0, 0.0, 1.0), joint_pos={"linear_slider__joint1": 0.0}
     ),
-    actuators={"linear_slider": ImplicitActuatorCfg(
-        joint_names_expr=[".*"],
-        effort_limit_sim=87.0,
-        stiffness=200.0,
-        damping=30.0
-    )}
+    actuators={
+        "linear_slider": ImplicitActuatorCfg(
+            joint_names_expr=[".*"], effort_limit_sim=87.0, stiffness=200.0, damping=30.0
+        )
+    },
 )

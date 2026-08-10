@@ -34,7 +34,6 @@ class ConvertUSDEnv(DirectRLEnv):
         return
 
     def _apply_action(self) -> None:
-        
 
         return
 

@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 from isaaclab.assets import AssetBaseCfg, ArticulationCfg, RigidObjectCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sim import (
-    MultiUsdFileCfg,
-    RigidBodyBaseCfg
-)
+from isaaclab.sim import MultiUsdFileCfg, RigidBodyBaseCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 

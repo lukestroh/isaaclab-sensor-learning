@@ -97,13 +97,11 @@ class PoseDataCaptureEnv(DirectRLEnv):
 
         self.robot = self.scene.articulations["robot"]
 
-
         # add sensors to the scene
         self.eef_sensors = self.rig_generator.generate_rig(sensor_cfgs=self.eef_sensor_cfgs)
         # TODO: Add lidar in generate_rig
         self.scene.sensors.update(self.eef_sensors)
         self.sensors = self.scene.sensors
-
 
         self.scene.clone_environments(copy_from_source=True)
 
@@ -119,6 +117,11 @@ class PoseDataCaptureEnv(DirectRLEnv):
         return
 
     def _apply_action(self) -> None:
+        # self.robot.reset()
+        # joint_pos = self.robot.data.default_joint_pos.clone()
+        # joint_vel = self.robot.data.default_joint_vel.clone()
+        # self.robot.write_joint_state_to_sim_index(position=joint_pos, velocity=joint_vel)
+
         self.ik_controller.reset()
         self.ik_controller.set_command(self.actions)  # (N, 7discrete_poses.shape[0]) target pose in world frame
 
@@ -148,16 +151,30 @@ class PoseDataCaptureEnv(DirectRLEnv):
         # print("target pose:\n", self.actions)
         # print("eef pose:\n", eef_pose_w)
         # print("eef_pose_b:\n", torch.cat([eef_pos_b, eef_quat_b], dim=-1))
-        
+
         # print("joint limits:\n", joint_limits)
-        
+
         # apply actions
         self.robot.set_joint_position_target_index(target=joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
         self.scene.write_data_to_sim()
+        # self.sim.step()
         # self.sim.forward()
         # self.sim.render()
         # self.sim.step()
         # self.scene.update(self.sim.get_physics_dt())
+
+        # Set angles directly (doesn't work?)
+        # self.robot.reset()
+        # joint_pos = self.robot.data.default_joint_pos.clone()
+        # joint_vel = self.robot.data.default_joint_vel.clone()
+        # self.robot.set_joint_position_target(joint_pos_des)
+
+        # self.robot.write_joint_velocity_to_sim_index(velocity=torch.zeros(size=joint_pos_des.shape, device=joint_pos_des.device))
+        # print(eef_pose_w)
+        # self.robot.write_joint_position_to_sim_index(position=joint_pos_des)
+        # self.sim.forward()
+        # self.sim.render()
+        # self.sim.step()
 
         # manually update sensor positions to ensure they are in sync with the robot's end-effector
         for sensor in self.sensors.values():
@@ -176,9 +193,6 @@ class PoseDataCaptureEnv(DirectRLEnv):
 
         # joint_pos_des2 = torch.tensor(joint_pos_des2[torch.newaxis, :], dtype=torch.float32, device=self.device)
 
-        # Set angles directly (doesn't work?)
-        # self.robot.write_joint_state_to_sim(joint_pos_des, torch.zeros(size=joint_pos_des.shape, device=joint_pos_des.device))
-        # self.robot.write_joint_position_to_sim_index(position=joint_pos_des)
         # self.robot.reset()
 
         # update marker poses

@@ -18,6 +18,7 @@ import isaaclab.utils.math as math_utils
 
 from isaaclab_sensor_learning import URDF_DIR, USD_DIR
 from isaaclab_sensor_learning.controllers.limit_aware_ik import LimitAwareIK
+from isaaclab_sensor_learning.evaluation.evaluation import CoverageEvaluator, ObservationConfig, GainConfig
 from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
 import isaaclab_sensor_learning.sensor.yaml_to_cfg as yaml_to_cfg
 import isaaclab_sensor_learning.utils.usd_utils as usd_utils
@@ -63,17 +64,17 @@ class PoseEvaluationEnv(DirectRLEnv):
             size=(self.num_envs, self.ik_controller.action_dim), dtype=torch.float32, device=self.device
         )  # (N, 7) target pose in world frame
 
-
         return
-    
+
     @property
     def find_new_goal_pose(self) -> bool:
         """Check if a new goal pose needs to be generated."""
         return self._find_new_goal_pose
-    
+
     @find_new_goal_pose.setter
     def find_new_goal_pose(self, value: bool) -> None:
         self._find_new_goal_pose = value
+        return
 
     def _setup_scene(self) -> None:
         self._rig_cfg = yaml_to_cfg.load_rig_yaml(rig_yaml_path=self.cfg.rig_yaml_path)
@@ -129,7 +130,6 @@ class PoseEvaluationEnv(DirectRLEnv):
 
     def _apply_action(self) -> None:
         eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
-        
 
         self.ik_controller.reset()
         self.ik_controller.set_command(self.actions)  # (N, 7discrete_poses.shape[0]) target pose in world frame
@@ -152,7 +152,7 @@ class PoseEvaluationEnv(DirectRLEnv):
         # joint_pos_des = self.limit_aware_ik_controller.solve(
         #     eef_pos_b, eef_quat_b, jacobians, joint_pos, joint_limits, max_iters=10, eps=1e-3
         # )
-        
+
         # apply actions
         self.robot.set_joint_position_target_index(target=joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
         self.scene.write_data_to_sim()

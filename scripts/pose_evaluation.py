@@ -34,11 +34,14 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 import torch
 import numpy as np
+import pxr
 
 # from isaaclab.markers import VisualizationMarkers
 # from isaaclab.markers.config import FRAME_MARKER_CFG
 # from isaaclab.managers import SceneEntityCfg
-# import isaaclab.sim as sim_utils
+from isaaclab.assets import Articulation
+from isaaclab.scene import InteractiveScene
+import isaaclab.sim as sim_utils
 import isaaclab.utils.math as math_utils
 from isaaclab_tasks.utils import parse_env_cfg
 
@@ -54,8 +57,6 @@ import os
 import time
 import h5py as h5
 
-import pprint as pp
-
 
 def main():
     env_cfg = parse_env_cfg(
@@ -66,33 +67,58 @@ def main():
 
     # reset environment
     env.reset()
-    robot = env.unwrapped.robot
+    robot: Articulation = env.unwrapped.robot
     num_envs = env.unwrapped.cfg.num_envs
-    # env.unwrapped.goal_pose = torch.zeros((env.unwrapped.cfg.num_envs, 7), dtype=torch.float32, device=env.unwrapped.device)
+    scene: InteractiveScene = env.unwrapped.scene
+    sim: sim_utils.SimulationContext = env.unwrapped.sim
 
-    # load poses from file
-    with h5.File("/home/luke/IsaacLab/source/isaaclab-sensor-learning/data/SL-PDC_20260721_140000.h5", "r") as f:
+    # # load poses from file
+    with h5.File("/home/luke/IsaacLab/source/isaaclab-sensor-learning/data/SL-PDC_20260730_133953.h5", "r") as f:
         trial_dict = h5py_utils.h5_to_dict(f)
 
-    for key, val in trial_dict['trees'].items():
-        pp.pprint(val['attrs'])
-    
-        
+    # Set up data logger
+    # dlog = data_logger.DataLogger() # TODO: add args for evaluation vs. capture
+
+    # stage = scene.stage
+    # for i in range(num_envs):
+    #     tree_prim = stage.GetPrimAtPath(f"/World/envs/env_{i}/tree")
+    #     # pp.pprint(dir(tree_prim))
+    #     trunk_prim = tree_prim.GetChildren()
+    #     print(trunk_prim)
+
+    # return
+
+    joint_pos = robot.data.default_joint_pos.clone()
+    joint_vel = robot.data.default_joint_vel.clone()
+    robot.write_joint_state_to_sim_index(position=joint_pos, velocity=joint_vel)
+    sim.step()
 
     goal_pose = torch.zeros((num_envs, 7), dtype=torch.float32)
 
     # simulate environment
     while simulation_app.is_running():
         with torch.inference_mode():
-            # check if the robot's end-effector is close to the goal pose
-            robot_base_w = robot.data.root_pose_w.torch
-            robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
-            # position
-            robot_positions_b = torch.subtract(robot_eef_w[:, 0:3], robot_base_w[:, 0:3])
-            positions_close = torch.isclose(robot_positions_b[:, 0:3], goal_pose[:, 0:3], atol=0.002)
+            # actions = ...
+            # observations, rewards, terminated, truncated, info = env.step(actions)
 
-            actions = ...
-            observations, rewards, terminated, truncated, info = env.step(actions)
+            # # check if the robot's end-effector is close to the goal pose
+            # robot_base_w = robot.data.root_pose_w.torch
+            # robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
+            # # position
+            # robot_positions_b = torch.subtract(robot_eef_w[:, 0:3], robot_base_w[:, 0:3])
+            # positions_close = torch.isclose(robot_positions_b[:, 0:3], goal_pose[:, 0:3], atol=0.002)
+            # # orientation
+            # quat_diff_err = math_utils.quat_error_magnitude(actions[:, 3:7], robot_eef_w[:, 3:7])
+            # orientations_close = torch.isclose(quat_diff_err, torch.tensor(0.0), atol=0.006)
+
+            # # save observations and poses if the robot's end-effector is close to the goal pose
+            # if positions_close.all() and orientations_close.all():
+            #     if pose_idx >= len(discrete_poses):
+            #         dlog.save_observations(observations=observations, poses=robot_eef_w, idx=pose_idx, last_obs=True)
+            #         break
+            #     else:
+            #         dlog.save_observations(observations=observations, poses=robot_eef_w, idx=pose_idx)
+
             break
     return
 

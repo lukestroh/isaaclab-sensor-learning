@@ -163,7 +163,7 @@ def generate_uniform_cylindrical_pts(
 
     cylindrical_pts = np.vstack(positions)
 
-    axis_point = np.array([0,0,np.mean(z_range)])
+    axis_point = np.array([0, 0, np.mean(z_range)])
 
     cylindrical_pts = rotate_points_about_axis(
         cylindrical_pts, axis_point=axis_point, axis_direction=np.array([-1, 0, 0]), psi=np.pi / 2

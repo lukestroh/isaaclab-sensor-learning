@@ -35,6 +35,7 @@ from pxr import UsdPhysics
 import os
 import pprint as pp
 
+
 def main():
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
@@ -52,7 +53,7 @@ def main():
     # # simulate environment
     while simulation_app.is_running():
         with torch.inference_mode():
-            actions = torch.zeros(size=(1,7), dtype=torch.float32)
+            actions = torch.zeros(size=(1, 7), dtype=torch.float32)
             env.step(actions)
 
     # close the simulator

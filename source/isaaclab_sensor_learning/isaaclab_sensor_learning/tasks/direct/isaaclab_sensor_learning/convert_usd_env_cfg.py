@@ -5,15 +5,12 @@
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sim import (
-    SimulationCfg,
-    RenderCfg,
-    DomeLightCfg
-)
+from isaaclab.sim import SimulationCfg, RenderCfg, DomeLightCfg
 from isaaclab.utils import configclass
 from isaaclab.terrains import TerrainImporterCfg
 
 import isaaclab_sensor_learning.utils.usd_utils as usd_utils
+
 # from pose_data_capture.sensor.yaml_to_cfg import rig_yaml_to_sensor_cfgs
 import isaaclab.sim as sim_utils
 from isaaclab_sensor_learning import USD_DIR, URDF_DIR
@@ -26,7 +23,7 @@ import os
 
 @configclass
 class ConvertUSDSceneCfg(InteractiveSceneCfg):
-     # terrain
+    # terrain
     terrain = TerrainImporterCfg(prim_path="/World/ground", terrain_type="plane", debug_vis=False)
 
     dome_light = AssetBaseCfg(prim_path="/World/Light", spawn=DomeLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0)))
@@ -41,8 +38,8 @@ class ConvertUSDSceneCfg(InteractiveSceneCfg):
                     robot_name="linear_slider",
                     urdf_path=os.path.join(URDF_DIR, f"linear_slider/linear_slider.urdf"),
                     stiffness={"linear_slider__joint1": 200.0},
-                    damping={"linear_slider__joint1": 30.0}
-                ).usd_file_name
+                    damping={"linear_slider__joint1": 30.0},
+                ).usd_file_name,
             ),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 disable_gravity=False,
@@ -50,16 +47,14 @@ class ConvertUSDSceneCfg(InteractiveSceneCfg):
             ),
             activate_contact_sensors=False,
         ),
-        init_state=ArticulationCfg.InitialStateCfg(
-            joint_pos = {"linear_slider__joint1": 0.0}
-        ),
-        actuators={"linear_slider": ImplicitActuatorCfg(
-            joint_names_expr=[".*"],
-            effort_limit_sim=87.0,
-            stiffness=200.0,
-            damping=30.0
-        )}
+        init_state=ArticulationCfg.InitialStateCfg(joint_pos={"linear_slider__joint1": 0.0}),
+        actuators={
+            "linear_slider": ImplicitActuatorCfg(
+                joint_names_expr=[".*"], effort_limit_sim=87.0, stiffness=200.0, damping=30.0
+            )
+        },
     )
+
 
 @configclass
 class ConvertUSDEnvCfg(DirectRLEnvCfg):

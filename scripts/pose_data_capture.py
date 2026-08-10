@@ -42,6 +42,7 @@ import time
 import isaaclab.sim as sim_utils
 import isaaclab.sim.views as sim_views
 from isaaclab.sim.utils import stage as stage_utils
+from isaaclab.sim.utils import semantics as semantic_utils
 from pxr import Usd, UsdGeom
 
 from isaaclab.assets import Articulation
@@ -63,7 +64,6 @@ def main():
     # reset environment
     env.reset()
 
-
     robot: Articulation = env.unwrapped.robot
     sensors: dict = env.unwrapped.sensors
     scene: InteractiveScene = env.unwrapped.scene
@@ -72,8 +72,7 @@ def main():
 
     # Set up data logger
     dlog = data_logger.DataLogger()
-
-    r_range = (0.8, 1.4)
+    r_range = (0.9, 1.4)
     r_size = 5
     theta_cyl_range = (-np.pi / 8, np.pi / 8)
     theta_cyl_size = 10
@@ -179,14 +178,24 @@ def main():
     step_count_limit = 500
     max_steps = 0
     avg_step_count = 0
+    total_steps = 0
     skipped_poses = []
     # avg_step_time = 0.0
+
+    joint_pos = robot.data.default_joint_pos.clone()
+    joint_vel = robot.data.default_joint_vel.clone()
+    robot.write_joint_state_to_sim_index(position=joint_pos, velocity=joint_vel)
+    sim.step()
+
+    # robot.reset()
     while simulation_app.is_running():
+
         # check if poses completed. save any skipped poses
         if pose_idx >= len(discrete_poses):
             print("\n[INFO]: All poses completed, exiting simulation.")
             dlog.save_skipped_poses(skipped_poses=skipped_poses)
-            break            
+            dlog.save_labels_dict()
+            break
 
         print(f"\rpose iter: {pose_idx+1}/{len(discrete_poses)}", end="")
 
@@ -195,7 +204,6 @@ def main():
             goal_pose = torch.tensor(
                 discrete_poses[pose_idx][np.newaxis, :], dtype=torch.float32, device=env.unwrapped.device
             )
-
 
             # Actions
             actions = torch.tensor(goal_pose.detach().clone(), dtype=torch.float32, device=env.unwrapped.device).repeat(
@@ -209,36 +217,48 @@ def main():
             robot_base_w = robot.data.root_pose_w.torch
             robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
             # position
-            robot_positions_b = torch.subtract(robot_eef_w[:, 0:3], robot_base_w[:, 0:3])
-            positions_close = torch.isclose(robot_positions_b[:, 0:3], goal_pose[:, 0:3], atol=0.002)
+            robot_eef_pos_b = torch.subtract(robot_eef_w[:, 0:3], robot_base_w[:, 0:3])
+            positions_close = torch.isclose(robot_eef_pos_b[:, 0:3], goal_pose[:, 0:3], atol=0.002)
             # orientation
             quat_diff_err = math_utils.quat_error_magnitude(actions[:, 3:7], robot_eef_w[:, 3:7])
             orientations_close = torch.isclose(quat_diff_err, torch.tensor(0.0), atol=0.006)
 
+            # print(positions_close, orientations_close, step_count, end="\r")
+            # print(goal_pose[:, 0:3])
+            # print(robot_eef_pos_b[:, 0:3])
+            if step_count > max_steps:
+                max_steps = step_count
+
             # save observations and poses if the robot's end-effector is close to the goal pose
             if positions_close.all() and orientations_close.all():
                 if pose_idx >= len(discrete_poses):
-                    dlog.save_observations(observations=observations, poses=robot_eef_w, idx=pose_idx, last_obs=True)
+                    dlog.save_pose_observations(
+                        observations=observations, poses=robot_eef_w, idx=pose_idx, last_obs=True
+                    )
                     break
                 else:
-                    dlog.save_observations(observations=observations, poses=robot_eef_w, idx=pose_idx)
+                    dlog.save_pose_observations(observations=observations, poses=robot_eef_w, idx=pose_idx)
                 # break  # remove after testing
-                
+
                 print(f"  --  avg steps: {avg_step_count:.2f} -- max steps: {max_steps}", end="")
                 joint_pos = robot.data.default_joint_pos.clone()
                 joint_vel = robot.data.default_joint_vel.clone()
                 robot.write_joint_state_to_sim_index(position=joint_pos, velocity=joint_vel)
                 robot.reset()
-                avg_step_count = (avg_step_count + step_count) / (pose_idx + 1)
-                if step_count > max_steps:
-                    max_steps = step_count
+                total_steps += step_count
+                avg_step_count = total_steps / (pose_idx + 1)
                 step_count = 0
                 pose_idx += 1
             else:
                 if step_count > step_count_limit:
-                    print(f"\n[WARNING]: Step count exceeded {step_count_limit} for pose {pose_idx}, continuing to next pose.")
-                    dlog.save_observations(observations=observations, poses=robot_eef_w, idx=pose_idx) # save observations even if not reached goal. change later?
+                    print(
+                        f"\n[WARNING]: Step count exceeded {step_count_limit} for pose {pose_idx}, continuing to next pose."
+                    )
+                    dlog.save_pose_observations(
+                        observations=observations, poses=robot_eef_w, idx=pose_idx
+                    )  # save observations even if not reached goal. change later?
                     skipped_poses.append(pose_idx)
+                    total_steps += step_count
                     step_count = 0
                     pose_idx += 1
                     continue

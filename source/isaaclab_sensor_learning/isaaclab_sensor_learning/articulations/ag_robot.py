@@ -20,9 +20,9 @@ AG_ROBOT_UR5e_CFG = ArticulationCfg(
         activate_contact_sensors=False,
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos = (0.0, 0.0, 0.0),
-        rot = (0.0, 0.0, 0.0, 1.0),
-        joint_pos = {
+        pos=(0.0, 0.0, 0.0),
+        rot=(0.0, 0.0, 0.0, 1.0),
+        joint_pos={
             "linear_slider__joint1": 0.0,
             "ur5e__shoulder_pan_joint": 3.141592653589793,
             "ur5e__shoulder_lift_joint": -1.5707963267948966,
@@ -30,7 +30,7 @@ AG_ROBOT_UR5e_CFG = ArticulationCfg(
             "ur5e__wrist_1_joint": -1.5707963267948966,
             "ur5e__wrist_2_joint": -1.5707963267948966,
             "ur5e__wrist_3_joint": 0.0,
-        }
+        },
     ),
     actuators={
         "linear_slider": ImplicitActuatorCfg(
@@ -38,7 +38,7 @@ AG_ROBOT_UR5e_CFG = ArticulationCfg(
             effort_limit_sim=87.0,
             velocity_limit=0.4,
             stiffness=10000.0,
-            damping=5000.0
+            damping=5000.0,
         ),
         "shoulder_pan": ImplicitActuatorCfg(
             joint_names_expr=["ur5e__shoulder_pan_joint"],
@@ -103,9 +103,9 @@ AG_ROBOT_UR10e_CFG = ArticulationCfg(
         activate_contact_sensors=False,
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos = (0.0, 0.0, 0.0),
-        rot = (0.0, 0.0, 0.0, 1.0),
-        joint_pos = {
+        pos=(0.0, 0.0, 0.0),
+        rot=(0.0, 0.0, 0.0, 1.0),
+        joint_pos={
             "linear_slider__joint1": 0.0,
             "ur10e__shoulder_pan_joint": 0.0,
             "ur10e__shoulder_lift_joint": -1.5707963267948966,
@@ -113,7 +113,7 @@ AG_ROBOT_UR10e_CFG = ArticulationCfg(
             "ur10e__wrist_1_joint": -3.141592653589793,
             "ur10e__wrist_2_joint": -1.5707963267948966,
             "ur10e__wrist_3_joint": 0.0,
-        }
+        },
     ),
     actuators={
         "linear_slider": ImplicitActuatorCfg(
@@ -121,7 +121,7 @@ AG_ROBOT_UR10e_CFG = ArticulationCfg(
             effort_limit_sim=87.0,
             velocity_limit=0.4,
             stiffness=40000.0,
-            damping=5000.0
+            damping=5000.0,
         ),
         "shoulder_pan": ImplicitActuatorCfg(
             joint_names_expr=["ur10e__shoulder_pan_joint"],
@@ -140,14 +140,14 @@ AG_ROBOT_UR10e_CFG = ArticulationCfg(
         "elbow": ImplicitActuatorCfg(
             joint_names_expr=["ur10e__elbow_joint"],
             stiffness=300_000.0,
-            damping=2000,
+            damping=12_000.0,
             friction=0.0,
             armature=0.0,
         ),
         "wrist_1": ImplicitActuatorCfg(
             joint_names_expr=["ur10e__wrist_1_joint"],
             stiffness=1500.0,
-            damping=29.39387691,
+            damping=200,
             friction=0.0,
             armature=0.0,
         ),
@@ -165,28 +165,27 @@ AG_ROBOT_UR10e_CFG = ArticulationCfg(
             friction=0.0,
             armature=0.0,
         ),
-
     },
 )
 
-        # "shoulder": ImplicitActuatorCfg(
-        #     joint_names_expr=["ur10e__shoulder_.*"],
-        #     stiffness=1320.0,
-        #     damping=72.6636085,
-        #     friction=0.0,
-        #     armature=0.0,
-        # ),
-        # "elbow": ImplicitActuatorCfg(
-        #     joint_names_expr=["ur10e__elbow_joint"],
-        #     stiffness=600.0,
-        #     damping=34.64101615,
-        #     friction=0.0,
-        #     armature=0.0,
-        # ),
-        # "wrist": ImplicitActuatorCfg(
-        #     joint_names_expr=["ur10e__wrist_.*"],
-        #     stiffness=216.0,
-        #     damping=29.39387691,
-        #     friction=0.0,
-        #     armature=0.0,
-        # ),
+# "shoulder": ImplicitActuatorCfg(
+#     joint_names_expr=["ur10e__shoulder_.*"],
+#     stiffness=1320.0,
+#     damping=72.6636085,
+#     friction=0.0,
+#     armature=0.0,
+# ),
+# "elbow": ImplicitActuatorCfg(
+#     joint_names_expr=["ur10e__elbow_joint"],
+#     stiffness=600.0,
+#     damping=34.64101615,
+#     friction=0.0,
+#     armature=0.0,
+# ),
+# "wrist": ImplicitActuatorCfg(
+#     joint_names_expr=["ur10e__wrist_.*"],
+#     stiffness=216.0,
+#     damping=29.39387691,
+#     friction=0.0,
+#     armature=0.0,
+# ),

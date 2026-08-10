@@ -111,7 +111,8 @@ class RigGenerator:
                 # offset_cfg.convention = "ros"
 
                 # prim_path = f"/World/envs/env_.*/robot/Geometry/amiga__base/amiga__body/amiga__tool0/linear_slider__base/linear_slider__base_link/linear_slider__moving_base/linear_slider__flange/linear_slider__tool0/ur10e__base_link/ur10e__base_link_inertia/ur10e__shoulder_link/ur10e__upper_arm_link/ur10e__forearm_link/ur10e__wrist_1_link/ur10e__wrist_2_link/ur10e__wrist_3_link/ur10e__flange/ur10e__tool0/{sensor_name}"
-                prim_path = f"/World/envs/env_.*/robot/ur10e__tool0/{sensor_name}"
+                # prim_path = f"/World/envs/env_.*/robot/ur10e__tool0/{sensor_name}"
+                prim_path = f"/World/envs/env_.*/{sensor_name}"
 
                 # Create sensor config
                 sensor_cfgs[sensor_name] = {
@@ -127,7 +128,9 @@ class RigGenerator:
                                 width=depth_sensor_metadata["width"],
                                 height=depth_sensor_metadata["height"],
                                 degrees=True,
-                            ).flatten().tolist(),
+                            )
+                            .flatten()
+                            .tolist(),
                             width=depth_sensor_metadata["width"],
                             height=depth_sensor_metadata["height"],
                             clipping_range=(depth_sensor_metadata["z_near"], depth_sensor_metadata["z_far"]),
