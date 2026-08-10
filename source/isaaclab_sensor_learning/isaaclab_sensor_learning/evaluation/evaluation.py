@@ -247,7 +247,7 @@ ius using a kd-tree for each environment."""
             # NORMALS MASK
             # Convert normals to quaternions
             flattened_normals = normals_data.flatten(start_dim=0, end_dim=-2)
-            world_z = torch.tensor([[0.0, 0.0, 1.0]], device=self.device).expand_as(flattened_normals)
+            world_z = torch.tensor([[0.0, 0.0, 1.0]], device=self.device)
             # axis that rotates world_z to the normal (cross(world_z, normal))
             rot_axes = torch.cross(world_z, flattened_normals, dim=-1)
             sin_theta = torch.linalg.norm(rot_axes, dim=-1)
@@ -284,17 +284,19 @@ ius using a kd-tree for each environment."""
             instance_masked = (instance_data * permissible_mask).reshape(-1, sensor_height, sensor_width, 4)
             semantic_masked = (semantic_data * permissible_mask).reshape(-1, sensor_height, sensor_width, 4)
             # print(instance_masked.shape)
-            import time
+
             quat_diff_err = quat_diff_err.reshape(-1, sensor_height, sensor_width)
             rgb_data = rgb_data.reshape(-1, sensor_height, sensor_width, 3)
 
             _idx = 112
             print(rgb_data.reshape(-1, sensor_height, sensor_width, 3)[_idx])
+            print(depth_data.reshape(-1, sensor_height, sensor_width)[_idx])
             print(torch.rad2deg(quat_diff_err).reshape(-1, sensor_height, sensor_width)[_idx])
 
             print(self.observation_config.max_incidence_angle)
             print(np.radians(self.observation_config.max_incidence_angle))
             print(torch.where(normals_mask))
+            print(torch.where(permissible_mask))
             
             # print([0])
             # print(f"any _masked: {torch.any(quat_diff_err)}")

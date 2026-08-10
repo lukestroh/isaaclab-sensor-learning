@@ -212,6 +212,8 @@ def main():
             # step
             observations, rewards, terminated, truncated, info = env.step(actions)
             step_count += 1
+            
+
 
             # check if the robot's end-effector is close to the goal pose
             robot_base_w = robot.data.root_pose_w.torch
@@ -223,6 +225,9 @@ def main():
             quat_diff_err = math_utils.quat_error_magnitude(actions[:, 3:7], robot_eef_w[:, 3:7])
             orientations_close = torch.isclose(quat_diff_err, torch.tensor(0.0), atol=0.006)
 
+            for sensor_name, sensor in sensors.items():
+                print(sensor.data.pos_w.torch)
+
             # print(positions_close, orientations_close, step_count, end="\r")
             # print(goal_pose[:, 0:3])
             # print(robot_eef_pos_b[:, 0:3])
@@ -231,6 +236,8 @@ def main():
 
             # save observations and poses if the robot's end-effector is close to the goal pose
             if positions_close.all() and orientations_close.all():
+                print("HELLOW ROLD", observations['tof0'].output['normals'].torch)
+
                 if pose_idx >= len(discrete_poses):
                     dlog.save_pose_observations(
                         observations=observations, poses=robot_eef_w, idx=pose_idx, last_obs=True
