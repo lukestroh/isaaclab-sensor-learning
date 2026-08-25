@@ -24,3 +24,14 @@ USD_DIR = os.path.join(PKG_DIR, "usd")
 URDF_DIR = os.path.join(PKG_DIR, "urdf")
 
 TREES_DIR = os.path.join(PKG_DIR, "trees")
+
+DATA_DIR = os.path.join(PKG_DIR, "../../../data")
+
+
+def main():
+    print(os.path.exists(DATA_DIR))
+    return
+
+
+if __name__ == "__main__":
+    main()

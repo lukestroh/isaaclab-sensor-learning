@@ -27,7 +27,7 @@ class SensorLearningSceneCfg(InteractiveSceneCfg):
     trees = AssetBaseCfg(
         prim_path="/World/envs/env_.*/tree",
         spawn=MultiUsdFileCfg(
-            usd_path=glob.glob(os.path.join(TREES_DIR, "models", "*_uv.usda")),
+            usd_path=sorted(glob.glob(os.path.join(TREES_DIR, "models", "*_uv.usda"))),
             random_choice=False,
             rigid_props=RigidBodyBaseCfg(),
         ),

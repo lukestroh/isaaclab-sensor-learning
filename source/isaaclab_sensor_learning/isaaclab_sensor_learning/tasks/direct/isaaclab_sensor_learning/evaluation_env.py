@@ -16,15 +16,16 @@ from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiM
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 import isaaclab.utils.math as math_utils
 
-from isaaclab_sensor_learning import URDF_DIR, USD_DIR
+from isaaclab_sensor_learning import URDF_DIR, USD_DIR, DATA_DIR
 from isaaclab_sensor_learning.controllers.limit_aware_ik import LimitAwareIK
-from isaaclab_sensor_learning.evaluation.evaluation import CoverageEvaluator, ObservationConfig, GainConfig
 from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
 import isaaclab_sensor_learning.sensor.yaml_to_cfg as yaml_to_cfg
 import isaaclab_sensor_learning.utils.usd_utils as usd_utils
+import isaaclab_sensor_learning.utils.h5py_utils as h5py_utils
 from .evaluation_env_cfg import PoseEvaluationEnvCfg
 
 import os
+import h5py
 
 
 class PoseEvaluationEnv(DirectRLEnv):
@@ -129,6 +130,7 @@ class PoseEvaluationEnv(DirectRLEnv):
         return
 
     def _apply_action(self) -> None:
+
         eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
 
         self.ik_controller.reset()

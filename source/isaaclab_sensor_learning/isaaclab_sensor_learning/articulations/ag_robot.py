@@ -106,7 +106,7 @@ AG_ROBOT_UR10e_CFG = ArticulationCfg(
         pos=(0.0, 0.0, 0.0),
         rot=(0.0, 0.0, 0.0, 1.0),
         joint_pos={
-            "linear_slider__joint1": 0.0,
+            "linear_slider__joint1": 0.3999,
             "ur10e__shoulder_pan_joint": 0.0,
             "ur10e__shoulder_lift_joint": -1.5707963267948966,
             "ur10e__elbow_joint": 1.5707963267948966,
@@ -119,7 +119,7 @@ AG_ROBOT_UR10e_CFG = ArticulationCfg(
         "linear_slider": ImplicitActuatorCfg(
             joint_names_expr=["linear_slider__joint1"],
             effort_limit_sim=87.0,
-            velocity_limit=0.4,
+            velocity_limit_sim=0.4,
             stiffness=40000.0,
             damping=5000.0,
         ),

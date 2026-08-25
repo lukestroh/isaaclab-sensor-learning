@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from isaaclab.renderers import RendererCfg
 from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg
 from isaaclab.sim.spawners.sensors import PinholeCameraCfg
 import isaaclab.utils.math as math_utils
@@ -12,6 +13,7 @@ import isaaclab_sensor_learning.sensor.lidar_utils as lidar_utils
 import isaaclab_sensor_learning.sensor.rig_utils as rig_utils
 
 import torch
+import pprint as pp
 
 Sensor = Camera | MultiMeshRayCasterCamera
 SensorCfg = CameraCfg | MultiMeshRayCasterCameraCfg
@@ -21,7 +23,8 @@ class RigGenerator:
     def __init__(self, rig_sensor_cfgs: list[dict]):
         self._rig_sensor_cfgs = rig_sensor_cfgs
         self._sensor_groups = self.group_sensors_by_type()
-        print(f"[INFO]: Sensor groups: {self._sensor_groups}")
+        print(f"[INFO]: Sensor groups:")
+        pp.pprint(self._sensor_groups)
         # self.lloyd_layout_generator: LloydSphereSensorLayout
         # self.planar_layout_generator: PlaneSensorLayout
         return
@@ -33,7 +36,8 @@ class RigGenerator:
             "lidar": [],
             "tof": [],
         }
-        print(f"[INFO]: Sensor rig cfgs: {self._rig_sensor_cfgs}")
+        print(f"[INFO]: Sensor rig cfgs:")
+        pp.pprint(self._rig_sensor_cfgs)
         for rig_sensor_cfg in self._rig_sensor_cfgs:
             sensor_name = rig_sensor_cfg["name"]
             sensor_type = rig_sensor_cfg["sensor_type"]
@@ -66,7 +70,8 @@ class RigGenerator:
         #     )
         #     sensor_layout = self.planar_layout_generator.generate_sensor_layout()
 
-        print(f"[INFO]: Generated sensor layout: {sensor_layout}")
+        print(f"[INFO]: Generated sensor layout:")
+        pp.pprint(sensor_layout)
 
         return sensor_layout
 
@@ -140,6 +145,8 @@ class RigGenerator:
                         update_period=float(1 / sensor_metadata["data_rate_hz"]),
                         update_latest_camera_pose=True,
                         debug_vis=True,
+                        colorize_instance_segmentation=False,
+                        colorize_semantic_segmentation=False,
                     ),
                 }
 

@@ -71,7 +71,7 @@ def main():
     cuda_device = env.unwrapped.device
 
     # Set up data logger
-    dlog = data_logger.DataLogger()
+    dlog = data_logger.DataLogger(process_type="capture")
     r_range = (0.9, 1.4)
     r_size = 5
     theta_cyl_range = (-np.pi / 8, np.pi / 8)
@@ -119,12 +119,32 @@ def main():
     # tree metadata
     tree_metadata = {}
     tree_prims = [prim for prim in stage_utils.get_current_stage().Traverse() if prim.GetName() == "tree"]
+    exclude_re = re.compile(r"/(?:Looks|skeleton)(?:/|$)")
+    instance_path_to_id_map = {f'env_{i}': {} for i in range(env.unwrapped.cfg.num_envs)}
+
     for tree_prim in tree_prims:
-        # print(pp.pformat(dir(tree_prim)))
+        next_id = 0
+        for prim in Usd.PrimRange(tree_prim):
+            path = str(prim.GetPath())
+            if exclude_re.search(path):
+                continue
+            if prim.IsA(UsdGeom.Mesh):
+                continue
+            env_match = re.search(r"env_(\d+)", path)
+            if env_match:
+                env_idx = int(env_match.group(1))
+                instance_path_to_id_map[f"env_{env_idx}"][path] = next_id
+            next_id += 1
+
+    # pp.pprint(instance_path_to_id_map)
+    for tree_prim in tree_prims:
+        # next_id = 0
         prim_path = tree_prim.GetPath()
         match = re.search(r"env_(\d+)", str(prim_path))
         if match:
             env_idx = int(match.group(1))
+
+
         usd_path = tree_prim.GetMetadata("references").prependedItems[0].assetPath
         # tree_pose = tree_prim.GetAttribute("xformOp:transform").Get()
         xformable = UsdGeom.Xformable(tree_prim)
@@ -142,6 +162,7 @@ def main():
             "tree_id": tree_id,
             "position": tree_pos.detach().cpu().numpy(),
             "orientation": tree_rot_mat.detach().cpu().numpy(),
+            "instance_path_to_id_map": instance_path_to_id_map[f"env_{env_idx}"],
         }
 
     # sensors
@@ -189,13 +210,12 @@ def main():
 
     # robot.reset()
     while simulation_app.is_running():
-
         # check if poses completed. save any skipped poses
         if pose_idx >= len(discrete_poses):
             print("\n[INFO]: All poses completed, exiting simulation.")
             dlog.save_skipped_poses(skipped_poses=skipped_poses)
             dlog.save_labels_dict()
-            break
+            
 
         print(f"\rpose iter: {pose_idx+1}/{len(discrete_poses)}", end="")
 
@@ -212,8 +232,6 @@ def main():
             # step
             observations, rewards, terminated, truncated, info = env.step(actions)
             step_count += 1
-            
-
 
             # check if the robot's end-effector is close to the goal pose
             robot_base_w = robot.data.root_pose_w.torch
@@ -225,8 +243,9 @@ def main():
             quat_diff_err = math_utils.quat_error_magnitude(actions[:, 3:7], robot_eef_w[:, 3:7])
             orientations_close = torch.isclose(quat_diff_err, torch.tensor(0.0), atol=0.006)
 
-            for sensor_name, sensor in sensors.items():
-                print(sensor.data.pos_w.torch)
+            # for sensor_name, sensor in sensors.items():
+            #     # print(sensor.data.output['rgb'].torch)
+            #     print(sensor.data.info['instance_segmentation_fast'])
 
             # print(positions_close, orientations_close, step_count, end="\r")
             # print(goal_pose[:, 0:3])
@@ -236,8 +255,6 @@ def main():
 
             # save observations and poses if the robot's end-effector is close to the goal pose
             if positions_close.all() and orientations_close.all():
-                print("HELLOW ROLD", observations['tof0'].output['normals'].torch)
-
                 if pose_idx >= len(discrete_poses):
                     dlog.save_pose_observations(
                         observations=observations, poses=robot_eef_w, idx=pose_idx, last_obs=True

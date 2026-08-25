@@ -13,9 +13,13 @@ import pprint as pp
 
 
 class DataLogger:
-    def __init__(self):
+    def __init__(self, process_type: str):
         self.TARGET_CHUNK_BYTES = 64 * 1024 * 1024  # 64 MB
-        self.datafile_path, self.trial_name = self.get_file_path()
+        self.process_types_to_label = {
+            "capture": "PDC",
+            "evaluation": "PDEVAL",
+        }
+        self.datafile_path, self.trial_name = self.get_file_path(process_type=process_type)
         self.sensor_obs_buf = {}
         self.actual_poses_buf = []
         self.idx_buf = []
@@ -23,6 +27,9 @@ class DataLogger:
         self.flush_every = None
 
         self.labels_dict = {"semantic_labels": {}, "instance_labels": {}}
+
+        
+
         return
 
     # def _compute_flush_every(self, observations: CameraData) -> dict[str, int]:
@@ -64,10 +71,17 @@ class DataLogger:
         }
         return buf
 
-    def get_file_path(self) -> str:
+    def get_file_path(self, process_type: str) -> tuple[str, str]:
+        """
+        Get the file path for the data file.
+        """
+        if process_type not in ["capture", "evaluation"]:
+            raise ValueError(f"Invalid process_type: {process_type}. Must be 'capture' or 'evaluation'.")
+
         pkg_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        data_dir = os.path.join(pkg_dir, "data")
-        trial_name = f"SL-PDC_{dt.now().strftime('%Y%m%d_%H%M%S')}"
+
+        data_dir = os.path.join(pkg_dir, "data", process_type)
+        trial_name = f"SL-{self.process_types_to_label[process_type]}_{dt.now().strftime('%Y%m%d_%H%M%S')}"
         file_path = os.path.join(data_dir, f"{trial_name}.h5")
         if not os.path.exists(data_dir):
             print(f"Creating data directory at {data_dir}")
@@ -140,6 +154,10 @@ class DataLogger:
                 env_group.attrs["tree_id"] = tree_info["tree_id"]
                 env_group.attrs["position"] = tree_info["position"]
                 env_group.attrs["orientation"] = tree_info["orientation"]
+
+                for instance_path, instance_id in tree_info["instance_path_to_id_map"].items():
+                    env_group.attrs[instance_path] = instance_id
+            
         return
 
     def save_sensor_metadata(self, sensor_metadata: dict, n_poses: int, num_envs: int) -> None:
@@ -184,18 +202,18 @@ class DataLogger:
                 )
                 sensor_group.require_dataset(
                     name="instance_segmentation",
-                    shape=(num_envs, n_poses, sensor_info["height"], sensor_info["width"], 4),
+                    shape=(num_envs, n_poses, sensor_info["height"], sensor_info["width"]),
                     chunks=self._get_entries_per_chunk(
-                        num_envs, (n_poses, sensor_info["height"], sensor_info["width"], 4)
+                        num_envs, (n_poses, sensor_info["height"], sensor_info["width"])
                     ),
                     dtype=np.float32,
                     compression="gzip",
                 )
                 sensor_group.require_dataset(
                     name="semantic_segmentation",
-                    shape=(num_envs, n_poses, sensor_info["height"], sensor_info["width"], 4),
+                    shape=(num_envs, n_poses, sensor_info["height"], sensor_info["width"]),
                     chunks=self._get_entries_per_chunk(
-                        num_envs, (n_poses, sensor_info["height"], sensor_info["width"], 4)
+                        num_envs, (n_poses, sensor_info["height"], sensor_info["width"])
                     ),
                     dtype=np.float32,
                     compression="gzip",
@@ -219,6 +237,28 @@ class DataLogger:
     def _reshape_tensor_to_numpy(self, tensors: list[torch.Tensor], shape: tuple = (0, 1)) -> np.ndarray:
         """Reshape a tensor of (n_poses, n_envs, ...) to numpy array of shape (n_envs, n_poses, ...)."""
         return torch.stack(tensors).transpose(*shape).detach().cpu().numpy()
+
+    # def save_observations(self, observations: dict[str, CameraData], poses: torch.Tensor, idx: int) -> None:
+    #     for sensor_name, sensor_data in observations.items():
+    #         # print(list(zip(sensor_data.info["instance_segmentation_fast"].keys(), sensor_data.info["instance_segmentation_fast"].values())))
+    #         with h5.File(self.datafile_path, "a") as file:
+    #             sensor_group = file.require_group(f"sensors/{sensor_name}")
+    #             sensor_group["pose"][:, idx, :] = torch.cat([sensor_data.pos_w.torch, sensor_data.quat_w_world.torch], dim=-1).detach().cpu().numpy()
+    #             sensor_group["intrinsic_matrix"][:, idx, :, :] = sensor_data.intrinsic_matrices.torch.detach().cpu().numpy()
+    #             sensor_group["rgb"][:, idx, :, :, :] = sensor_data.output["rgb"].torch.detach().cpu().numpy()
+    #             sensor_group["depth"][:, idx, :, :] = sensor_data.output["depth"].torch.squeeze(-1).detach().cpu().numpy()
+    #             sensor_group["instance_segmentation"][:, idx, :, :] = sensor_data.output[
+    #                 "instance_segmentation_fast"
+    #             ].torch.squeeze(-1).detach().cpu().numpy()
+    #             id_to_labels = sensor_data.info["instance_segmentation_fast"]['idToLabels']
+    #             sensor_group["instance_labels"][:, idx, :, :] = list(zip(id_to_labels.keys(), id_to_labels.values()))
+    #             sensor_group["semantic_segmentation"][:, idx, :, :] = sensor_data.output[
+    #                 "semantic_segmentation"
+    #             ].torch.squeeze(-1).detach().cpu().numpy()
+    #             # sensor_group["semantic_segmentation"].attrs["semantic_labels"] = sensor_data.info["semantic_segmentation"]
+    #             sensor_group["normals"][:, idx, :, :, :] = sensor_data.output["normals"].torch.detach().cpu().numpy()
+
+    #     return
 
     def save_pose_observations(
         self, observations: dict[str, CameraData], poses: torch.Tensor, idx: int, last_obs: bool = False
@@ -274,10 +314,10 @@ class DataLogger:
                 )
                 chunked_instance_segs = self._reshape_tensor_to_numpy(
                     self.sensor_obs_buf[sensor_name]["instance_segmentation"]
-                )
+                ).squeeze(axis=-1)
                 chunked_semantic_segs = self._reshape_tensor_to_numpy(
                     self.sensor_obs_buf[sensor_name]["semantic_segmentation"]
-                )
+                ).squeeze(axis=-1)
                 chunked_normals = self._reshape_tensor_to_numpy(self.sensor_obs_buf[sensor_name]["normals"])
 
                 self.sensor_obs_buf[sensor_name]["position_w"].clear()
