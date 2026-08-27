@@ -98,6 +98,7 @@ class DataLogger:
         # Save trial metadata to HDF5 file
         with h5.File(self.datafile_path, "w") as file:
             file.attrs["trial_name"] = trial_metadata["trial_name"]
+            file.attrs["seed"] = trial_metadata["seed"]
             file.attrs["num_envs"] = trial_metadata["num_envs"]
             # desired poses
             desired_poses_group = file.require_group("poses/desired_poses")

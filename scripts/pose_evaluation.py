@@ -63,9 +63,10 @@ import data_utils.pose_generator as pose_generator
 import pprint as pp
 import os
 
-
 import time
 import h5py
+
+from isaaclab.utils.seed import configure_seed
 
 
 def get_envs_to_move_intersection(a, b):
@@ -73,6 +74,14 @@ def get_envs_to_move_intersection(a, b):
 
 
 def main():
+    # trial data path
+    trial_data_path = os.path.join(DATA_DIR, "capture", f"{str(args_cli.trial_data_name)}.h5")
+    with h5py.File(trial_data_path, "r") as f:
+        trial_data_dict = h5py_utils.h5_to_dict(f)
+    print(trial_data_dict.keys())
+    seed = trial_data_dict['attrs']['seed']
+    configure_seed(int(seed))
+    
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
@@ -94,10 +103,7 @@ def main():
     # Set up data logger
     # dlog = data_logger.DataLogger() # TODO: add args for evaluation vs. capture
 
-    # trial data path
-    trial_data_path = os.path.join(DATA_DIR, "capture", f"{str(args_cli.trial_data_name)}.h5")
-    with h5py.File(trial_data_path, "r") as f:
-        trial_data_dict = h5py_utils.h5_to_dict(f)
+    
 
     # Read tree ids, make sure they are the same as the trial data
     tree_prims = [prim for prim in stage_utils.get_current_stage().Traverse() if prim.GetName() == "tree"]

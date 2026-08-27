@@ -9,6 +9,7 @@ parser.add_argument(
 )
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default="Template-Pose-Data-Capture-Direct-v0", help="Name of the task.")
+parser.add_argument("--seed", type=int, default=0, help="Seed argument for deterministic runs.")
 # parser.add_argument("--enable_cameras", action="store_true", default=True, help="Enable cameras in the environment.")
 
 # append AppLauncher cli args
@@ -48,10 +49,15 @@ from pxr import Usd, UsdGeom
 from isaaclab.assets import Articulation
 from isaaclab.scene import InteractiveScene
 
+from isaaclab.utils.seed import configure_seed
+
+
 # from isaaclab_sensor_learning.utils import logging_conf
 
 
 def main():
+    configure_seed(seed=args_cli.seed)
+
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
@@ -101,6 +107,7 @@ def main():
     # trial metadata
     trial_metadata = {
         "trial_name": dlog.trial_name,
+        "seed": args_cli.seed,
         "num_envs": env.unwrapped.cfg.num_envs,
         "r_range": r_range,
         "r_size": r_size,
@@ -215,6 +222,7 @@ def main():
             print("\n[INFO]: All poses completed, exiting simulation.")
             dlog.save_skipped_poses(skipped_poses=skipped_poses)
             dlog.save_labels_dict()
+            break
             
 
         print(f"\rpose iter: {pose_idx+1}/{len(discrete_poses)}", end="")
