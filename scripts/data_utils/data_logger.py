@@ -84,10 +84,10 @@ class DataLogger:
         trial_name = f"SL-{self.process_types_to_label[process_type]}_{dt.now().strftime('%Y%m%d_%H%M%S')}"
         file_path = os.path.join(data_dir, f"{trial_name}.h5")
         if not os.path.exists(data_dir):
-            print(f"Creating data directory at {data_dir}")
+            print(f"[INFO] Creating data directory at {data_dir}")
             os.makedirs(data_dir)
         if os.path.exists(file_path):
-            print(f"File {file_path} already exists. It will be overwritten.")
+            print(f"[WARNING] File {file_path} already exists. It will be overwritten.")
         return file_path, trial_name
 
     def save_trial_metadata(self, trial_metadata: dict) -> None:

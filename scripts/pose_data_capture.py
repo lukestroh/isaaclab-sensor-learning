@@ -129,10 +129,13 @@ def main():
     exclude_re = re.compile(r"/(?:Looks|skeleton)(?:/|$)")
     instance_path_to_id_map = {f'env_{i}': {} for i in range(env.unwrapped.cfg.num_envs)}
 
+    # get all tree part prims for indexing bin counts
     for tree_prim in tree_prims:
         next_id = 0
         for prim in Usd.PrimRange(tree_prim):
             path = str(prim.GetPath())
+            if path.endswith("tree"): # This is just the base prim, not a trunk
+                continue
             if exclude_re.search(path):
                 continue
             if prim.IsA(UsdGeom.Mesh):
@@ -223,7 +226,7 @@ def main():
             dlog.save_skipped_poses(skipped_poses=skipped_poses)
             dlog.save_labels_dict()
             break
-            
+
 
         print(f"\rpose iter: {pose_idx+1}/{len(discrete_poses)}", end="")
 

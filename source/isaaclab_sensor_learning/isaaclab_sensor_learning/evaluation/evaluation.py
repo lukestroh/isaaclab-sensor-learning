@@ -193,13 +193,12 @@ class CoverageEvaluator:
         self.gain_config = gain_config
 
         # Unique instances (by sensor)
-        for i in range(self.n_envs):
-            self.unique_instances = (
-                {  # NOTE: This only shows unique instances that have BEEN SEEN. NEED TO REDO, GET FROM TREE INFO
-                    f"env_{i}": trial_data["trees"][f"env_{i}"]["instance_labels"]["attrs"] for i in range(self.n_envs)
-                }
-            )
-
+        self.unique_instances = {f"env_{i}": {} for i in range(self.n_envs)}
+        for env_key, instance_dict in self.unique_instances.items():
+            for inst_key, inst_id in trial_data["trees"][env_key]['attrs'].items():
+                if not inst_key.startswith("/World"):
+                    continue
+                self.unique_instances[env_key][inst_key] = inst_id
         # Unique semantic classes (by sensor)
         self.unique_semantics = trial_data["trees"]["semantic_labels"]["attrs"]
 
@@ -355,6 +354,7 @@ class CoverageEvaluator:
             return empty, empty, empty
 
         valid_instances = flat_instance[valid]
+        
         valid_bin_l = flat_bin_l[valid]
         valid_bin_t = flat_bin_t[valid]
 
@@ -603,13 +603,15 @@ class CoverageEvaluator:
             valid = self._to_tensor_on_device(valid) if valid is not None else None
         else:
             output = getattr(sensor_data, "output", None)
-            if output is None:
+            info = getattr(sensor_data, "info", None)
+            if output is None or info is None:
                 return None
             if "rgb" not in output or "instance_segmentation_fast" not in output:
                 return None
 
             rgb = self._to_tensor_on_device(output["rgb"])
             instance = self._to_tensor_on_device(output["instance_segmentation_fast"])
+            instance_info = info["instance_segmentation_fast"]["idsToLabels"]
             valid = None
             if "depth" in output:
                 depth = self._to_tensor_on_device(output["depth"]).squeeze(-1)
