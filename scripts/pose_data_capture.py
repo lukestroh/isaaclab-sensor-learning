@@ -33,7 +33,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 import isaaclab_sensor_learning.tasks  # noqa: F401
 
-import data_utils.data_logger as data_logger
+import data_utils.capture_data_logger as data_logger
 import data_utils.pose_generator as pose_generator
 import pprint as pp
 import os
@@ -51,7 +51,6 @@ from isaaclab.scene import InteractiveScene
 
 from isaaclab.utils.seed import configure_seed
 
-
 # from isaaclab_sensor_learning.utils import logging_conf
 
 
@@ -64,12 +63,11 @@ def main():
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
 
-    # print info (this is vectorized environment)
     print(f"[INFO]: Gym observation space: {env.observation_space}")
     print(f"[INFO]: Gym action space: {env.action_space}")
+
     # reset environment
     env.reset()
-
     robot: Articulation = env.unwrapped.robot
     sensors: dict = env.unwrapped.sensors
     scene: InteractiveScene = env.unwrapped.scene
@@ -77,7 +75,9 @@ def main():
     cuda_device = env.unwrapped.device
 
     # Set up data logger
-    dlog = data_logger.DataLogger(process_type="capture")
+    dlog = data_logger.CaptureDataLogger(process_type="capture")
+
+    # Generate discrete poses
     r_range = (0.9, 1.4)
     r_size = 5
     theta_cyl_range = (-np.pi / 8, np.pi / 8)
@@ -123,18 +123,19 @@ def main():
         "robot_joint_names": robot.data.joint_names,
         "robot_body_names": robot.data.body_names,
     }
+
     # tree metadata
     tree_metadata = {}
     tree_prims = [prim for prim in stage_utils.get_current_stage().Traverse() if prim.GetName() == "tree"]
     exclude_re = re.compile(r"/(?:Looks|skeleton)(?:/|$)")
-    instance_path_to_id_map = {f'env_{i}': {} for i in range(env.unwrapped.cfg.num_envs)}
+    instance_path_to_id_map = {f"env_{i}": {} for i in range(env.unwrapped.cfg.num_envs)}
 
     # get all tree part prims for indexing bin counts
     for tree_prim in tree_prims:
         next_id = 0
         for prim in Usd.PrimRange(tree_prim):
             path = str(prim.GetPath())
-            if path.endswith("tree"): # This is just the base prim, not a trunk
+            if path.endswith("tree"):  # This is just the base prim, not a trunk
                 continue
             if exclude_re.search(path):
                 continue
@@ -153,7 +154,6 @@ def main():
         match = re.search(r"env_(\d+)", str(prim_path))
         if match:
             env_idx = int(match.group(1))
-
 
         usd_path = tree_prim.GetMetadata("references").prependedItems[0].assetPath
         # tree_pose = tree_prim.GetAttribute("xformOp:transform").Get()
@@ -227,7 +227,6 @@ def main():
             dlog.save_labels_dict()
             break
 
-
         print(f"\rpose iter: {pose_idx+1}/{len(discrete_poses)}", end="")
 
         # run everything in inference mode
@@ -242,6 +241,7 @@ def main():
             )
             # step
             observations, rewards, terminated, truncated, info = env.step(actions)
+            # print(observations["tof0"].info)
             step_count += 1
 
             # check if the robot's end-effector is close to the goal pose

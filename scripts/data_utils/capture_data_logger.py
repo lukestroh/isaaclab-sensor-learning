@@ -6,56 +6,29 @@ import os
 from datetime import datetime as dt
 import numpy as np
 import torch
-import warp
-
+from typing import Any
 from isaaclab.sensors import CameraData
 import pprint as pp
 
 
-class DataLogger:
-    def __init__(self, process_type: str):
+class CaptureDataLogger:
+    def __init__(self, process_type: str, compression_level: int = 9):
         self.TARGET_CHUNK_BYTES = 64 * 1024 * 1024  # 64 MB
-        self.process_types_to_label = {
-            "capture": "PDC",
-            "evaluation": "PDEVAL",
-        }
-        self.datafile_path, self.trial_name = self.get_file_path(process_type=process_type)
+        self.process_type = "capture"
+        self.datafile_path, self.trial_name = self.get_file_path()
         self.sensor_obs_buf = {}
         self.actual_poses_buf = []
         self.idx_buf = []
         # self.row_cursor = 0
         self.flush_every = None
-
         self.labels_dict = {"semantic_labels": {}, "instance_labels": {}}
-
-        
-
+        self.compression_level = compression_level
         return
 
-    # def _compute_flush_every(self, observations: CameraData) -> dict[str, int]:
-    #     MIN_FLUSH = 16
-    #     MAX_FLUSH = 8192
-
-    #     flush_every = {}
-    #     for sensor_name, sensor_data in observations.items():
-    #         fields = {
-    #             "position_w": sensor_data.pos_w,
-    #             "quat_w_world": sensor_data.quat_w_world,
-    #             "intrinsic_matrix": sensor_data.intrinsic_matrices,
-    #             "rgb": sensor_data.output["rgb"],
-    #             "depth": sensor_data.output["depth"],
-    #             "instance_segmentation": sensor_data.output["instance_segmentation_fast"],
-    #             "semantic_segmentation": sensor_data.output["semantic_segmentation"],
-    #             "normals": sensor_data.output["normals"],
-    #         }
-
-    #         total_bytes_per_entry = sum(t.numel() * t.element_size() for t in fields.values())
-    #         n = max(MIN_FLUSH, min(self.TARGET_CHUNK_BYTES // total_bytes_per_entry, MAX_FLUSH))
-    #         flush_every[sensor_name] = n
-
-    #         print(f"[DataLogger] {sensor_name}: {total_bytes_per_entry/1024:.1f} KB/entry → flush_every={n}")
-
-    #     return flush_every
+    def _get_chunk_steps(self, data_size: tuple, dtype: np.dtype, target_chunk_bytes=1_000_000) -> int:
+        row_bytes = np.prod(data_size) * np.dtype(dtype)
+        chunk_steps = max(1, target_chunk_bytes // row_bytes)
+        return chunk_steps
 
     def _get_camera_observation_buffer(self) -> dict:
         buf = {
@@ -71,17 +44,14 @@ class DataLogger:
         }
         return buf
 
-    def get_file_path(self, process_type: str) -> tuple[str, str]:
+    def get_file_path(self) -> tuple[str, str]:
         """
         Get the file path for the data file.
         """
-        if process_type not in ["capture", "evaluation"]:
-            raise ValueError(f"Invalid process_type: {process_type}. Must be 'capture' or 'evaluation'.")
-
         pkg_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-        data_dir = os.path.join(pkg_dir, "data", process_type)
-        trial_name = f"SL-{self.process_types_to_label[process_type]}_{dt.now().strftime('%Y%m%d_%H%M%S')}"
+        data_dir = os.path.join(pkg_dir, "data", self.process_type)
+        trial_name = f"SL-PDC_{dt.now().strftime('%Y%m%d_%H%M%S')}"
         file_path = os.path.join(data_dir, f"{trial_name}.h5")
         if not os.path.exists(data_dir):
             print(f"[INFO] Creating data directory at {data_dir}")
@@ -113,7 +83,9 @@ class DataLogger:
             desired_poses_group.attrs["phi_ori_range"] = trial_metadata["phi_ori_range"]
             desired_poses_group.attrs["phi_ori_size"] = trial_metadata["phi_ori_size"]
 
-            desired_poses_group.create_dataset("eef_poses", data=trial_metadata["poses"], compression="gzip")
+            desired_poses_group.create_dataset(
+                "eef_poses", data=trial_metadata["poses"], compression="gzip", compression_opts=self.compression_level
+            )
 
             # actual poses
             actual_poses_group = file.require_group("poses/actual_poses")
@@ -122,6 +94,7 @@ class DataLogger:
                 shape=(trial_metadata["num_envs"], len(trial_metadata["poses"]), 7),
                 dtype=np.float32,
                 compression="gzip",
+                compression_opts=self.compression_level,
             )
 
             # joint states
@@ -138,6 +111,7 @@ class DataLogger:
                 ),
                 dtype=np.float32,
                 compression="gzip",
+                compression_opts=self.compression_level,
             )
 
         return
@@ -158,7 +132,7 @@ class DataLogger:
 
                 for instance_path, instance_id in tree_info["instance_path_to_id_map"].items():
                     env_group.attrs[instance_path] = instance_id
-            
+
         return
 
     def save_sensor_metadata(self, sensor_metadata: dict, n_poses: int, num_envs: int) -> None:
@@ -175,6 +149,7 @@ class DataLogger:
                     chunks=self._get_entries_per_chunk(num_envs, (n_poses, 7)),
                     dtype=np.float32,
                     compression="gzip",
+                    compression_opts=self.compression_level,
                 )
                 sensor_group.require_dataset(
                     name="intrinsic_matrix",
@@ -182,6 +157,7 @@ class DataLogger:
                     chunks=self._get_entries_per_chunk(num_envs, (n_poses, 3, 3)),
                     dtype=np.float32,
                     compression="gzip",
+                    compression_opts=self.compression_level,
                 )
                 sensor_group.require_dataset(
                     name="rgb",
@@ -191,6 +167,7 @@ class DataLogger:
                     ),
                     dtype=np.float32,
                     compression="gzip",
+                    compression_opts=self.compression_level,
                 )
                 sensor_group.require_dataset(
                     name="depth",
@@ -200,6 +177,7 @@ class DataLogger:
                     ),
                     dtype=np.float32,
                     compression="gzip",
+                    compression_opts=self.compression_level,
                 )
                 sensor_group.require_dataset(
                     name="instance_segmentation",
@@ -209,6 +187,7 @@ class DataLogger:
                     ),
                     dtype=np.float32,
                     compression="gzip",
+                    compression_opts=self.compression_level,
                 )
                 sensor_group.require_dataset(
                     name="semantic_segmentation",
@@ -218,6 +197,7 @@ class DataLogger:
                     ),
                     dtype=np.float32,
                     compression="gzip",
+                    compression_opts=self.compression_level,
                 )
                 sensor_group.require_dataset(
                     name="normals",
@@ -227,6 +207,7 @@ class DataLogger:
                     ),
                     dtype=np.float32,
                     compression="gzip",
+                    compression_opts=self.compression_level,
                 )
         return
 
@@ -365,6 +346,7 @@ class DataLogger:
                 name="skipped_poses",
                 data=np.array(skipped_poses, dtype=np.int32),
                 compression="gzip",
+                compression_opts=self.compression_level,
             )
         return
 
