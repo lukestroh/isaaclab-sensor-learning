@@ -40,6 +40,7 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 import h5py
 import os
+import numpy as np
 import time
 import torch
 
@@ -53,7 +54,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 # from isaaclab_sensor_learning.motion_planning import diff_ik as diff_ik_mp
 from isaaclab_sensor_learning import DATA_DIR
-from isaaclab_sensor_learning.evaluation.evaluation import CoverageEvaluator, ObservationConfig, GainConfig
+from isaaclab_sensor_learning.evaluation.nbv import NBVEvaluator, ObservationConfig, GainConfig
 import isaaclab_sensor_learning.tasks  # noqa: F401
 from isaaclab_sensor_learning.utils import h5py_utils, usd_utils
 
@@ -91,8 +92,8 @@ def main():
     decimation = env.unwrapped.cfg.decimation
 
     # Get datetime as ID value connecting the capture and evaluation portions together
-    capture_data_name = trial_data_dict['attrs']['trial_name']
-    capture_data_split = capture_data_name.split('_')
+    capture_data_name = trial_data_dict["attrs"]["trial_name"]
+    capture_data_split = capture_data_name.split("_")
     capture_data_dt = "_".join([capture_data_split[-2], capture_data_split[-1]])
     capture_data_dict = {
         "datetime_id": capture_data_dt,
@@ -104,16 +105,14 @@ def main():
     evaluation_metadata = {
         "seed": seed,
         "trial_name": dlog.trial_name,
-        "associated_data": str(args_cli.trial_data_name)
+        "associated_data": str(args_cli.trial_data_name),
     }
-    timestamp_metadata = {
-        "physics_dt": physics_dt,
-        "decimation": decimation
-    }
+    timestamp_metadata = {"physics_dt": physics_dt, "decimation": decimation}
     dlog.save_evaluation_metadata(evaluation_metadata=evaluation_metadata)
     dlog.save_timestamp_metadata(timestamp_metadata=timestamp_metadata)
     dlog.save_joint_position_metadata(joint_position_metadata={"n_dof": robot.num_joints})
     dlog.save_nbv_goal_metadata()
+    dlog.save_sparse_bin_count_metadata()
     dlog.save_pose_metadata()
     # import sys; sys.exit(0)
 
@@ -141,7 +140,7 @@ def main():
     # Coverage evaluator
     observation_cfg = ObservationConfig()
     gain_cfg = GainConfig()
-    coverage_evaluator = CoverageEvaluator(
+    coverage_evaluator = NBVEvaluator(
         n_envs=num_envs,
         trial_data=trial_data_dict,
         observation_config=observation_cfg,
@@ -167,11 +166,7 @@ def main():
     actions = torch.cat((goal_position_b, goal_pose_w[env_idxs, 3:7]), dim=1)
     curr_time = 0
     for env_id in env_idxs:
-        dlog.save_nbv_goal(
-            env_id=env_id.item(),
-            timestamp=curr_time,
-            nbv_goal=actions[env_id]
-        )
+        dlog.save_nbv_goal(env_id=env_id.item(), timestamp=curr_time, nbv_goal=actions[env_id])
 
     seen_pose_idxs = torch.empty(size=(0, 2), dtype=torch.int64, device=device)
 
@@ -180,17 +175,23 @@ def main():
     # simulate environment
     while simulation_app.is_running():
         with torch.inference_mode():
+            # Log all timestamps
             current_step = env.unwrapped.common_step_counter
             curr_time = physics_dt * decimation * current_step
             dlog.save_timestamp(timestamp=curr_time, last_obs=last_obs)
 
+            # Get observations and save the sparse bin updates
             observations, rewards, terminated, truncated, info = env.step(actions)
             info_gains, dense_bin_updates, sparse_bin_updates = (
                 coverage_evaluator.update_bin_count_scores_from_observation(
                     env_ids=torch.arange(num_envs), observations=observations
                 )
             )
+            dlog.save_sparse_bin_counts(timestamp=curr_time, sparse_bin_updates=sparse_bin_updates, last_obs=last_obs)
+
+            # #################################################################
             # check if the robot's end-effector is close to the goal pose
+            # #################################################################
             robot_base_w = robot.data.root_pose_w.torch
             robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
 
@@ -230,8 +231,9 @@ def main():
                 if torch.any(unseen_current_poses):
                     seen_pose_idxs = torch.cat([seen_pose_idxs, unseen_current_poses], dim=0)
 
-                # compute the next best pose to move to based on the current end-effector pose and the trial data
-                # remove seen poses so we don't get redundant locations.
+                # Compute the next best pose to move to based on the current end-effector pose and the trial data.
+                # Remove seen poses so we don't get redundant locations.
+                # Update actions
                 closest_idxs = coverage_evaluator.get_closest_pose_idxs(curr_poses=robot_eef_w)
                 unseen_closest_idxs = closest_idxs[~closest_idxs.unsqueeze(1).eq(seen_pose_idxs).all(-1).any(-1)]
                 if unseen_closest_idxs.numel() == 0:
@@ -242,40 +244,37 @@ def main():
                 if best_pose_idxs.numel() == 0:
                     print(unseen_closest_idxs)
                     raise ValueError("no best poses")
-
                 env_idxs = best_pose_idxs[:, 0]
                 pose_idxs = best_pose_idxs[:, 1]
-
                 goal_pose_w = coverage_evaluator.poses[env_idxs, pose_idxs].clone().detach()
                 goal_position_b = torch.subtract(goal_pose_w[:, 0:3], robot_base_w[env_idxs, 0:3])
-
-                # # print(f'\ngoal_pose w\n{goal_pose_w[:, 0:3]}')
-                # # print(f'actions\n{actions}')
-                # # print('robot_base_w\n', robot_base_w[:, 0:3])
-                # # print('robot_eef_w\n',robot_eef_w[:, 0:3])
-                # # print(f'goal pos b\n{goal_position_b}')
                 goal_pose_b = torch.cat((goal_position_b, goal_pose_w[:, 3:7]), dim=1)
-
                 actions[env_idxs] = goal_pose_b
-                for env_id in env_idxs:
-                    dlog.save_nbv_goal(
-                        env_id=env_id.item(),
-                        timestamp=curr_time,
-                        nbv_goal=actions[env_id]
-                    )
 
+                # Save nbv goal on update
+                for env_id in env_idxs:
+                    dlog.save_nbv_goal(env_id=env_id.item(), timestamp=curr_time, nbv_goal=actions[env_id])
 
                 # update the current pose to the new best pose
                 current_poses[env_idxs] = best_pose_idxs
 
-
-
             if last_obs:
                 break
 
+            for env_key, env_bin_counts in coverage_evaluator.binned_tree.bin_counts.items():
+                more_than_5_counts_mask = torch.nonzero(env_bin_counts >= 5, as_tuple=False)
+                num_completed_bins = torch.numel(more_than_5_counts_mask)
+                env_total_bins = np.prod(tuple(env_bin_counts.shape))
+
+                seen_bins = num_completed_bins / env_total_bins
+
+                print(current_step, ": ", env_key, seen_bins)
+
             # Terminating condition
-            if current_step == 100_000:
+            if current_step == 10_000:
                 last_obs = True
+
+    print("[INFO]: Simulation completed")
     return
 
 
