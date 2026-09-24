@@ -2,6 +2,10 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
+#
+import glob
+import os
+from pathlib import Path
 
 from isaaclab.assets import AssetBaseCfg, ArticulationCfg, RigidObjectCfg, RigidObjectCollectionCfg
 from isaaclab.envs import DirectRLEnvCfg
@@ -15,13 +19,10 @@ from isaaclab_newton.physics import NewtonCfg
 from isaaclab_sensor_learning import USD_DIR, URDF_DIR, TREES_DIR
 from isaaclab_sensor_learning.articulations.ag_robot import AG_ROBOT_UR10e_CFG, AG_ROBOT_UR5e_CFG
 from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
+from isaaclab_sensor_learning.tasks.direct.isaaclab_sensor_learning import common_env_cfg_params as env_params
 from isaaclab_sensor_learning.tasks.direct.isaaclab_sensor_learning.sensor_learning_scene_cfg import (
     SensorLearningSceneCfg,
 )
-
-import glob
-import os
-from pathlib import Path
 
 
 @configclass
@@ -29,14 +30,14 @@ class PoseDataCaptureEnvCfg(DirectRLEnvCfg):
     """Configuration for the pose data capture environment."""
 
     # env
-    decimation = 2
-    episode_length_s = 60.0
+    decimation = env_params.decimation
+    episode_length_s = env_params.episode_length_s
     # - spaces definition
-    action_space = 7
-    observation_space = 4
-    state_space = 0
-    num_envs = 2
-    physics_dt = 1 / 120
+    action_space = env_params.action_space
+    observation_space = env_params.observation_space
+    state_space = env_params.state_space
+    num_envs = env_params.num_envs
+    physics_dt = env_params.physics_dt
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
@@ -56,5 +57,4 @@ class PoseDataCaptureEnvCfg(DirectRLEnvCfg):
     # rig
     rig_yaml_path: str = (
         Path(__file__).parent.parent.parent.parent / "config/rigs/test_rig0.yaml"
-    )  # NOTE: Standin for now, will be replaced by arguments from evolutionary outputs
-    # # rig_yaml_path: str = "pose_data_capture/pose_data_capture/assets/rigs/rig0.yaml"
+    ).as_posix()  # NOTE: Standin for now, will be replaced by arguments from evolutionary outputs

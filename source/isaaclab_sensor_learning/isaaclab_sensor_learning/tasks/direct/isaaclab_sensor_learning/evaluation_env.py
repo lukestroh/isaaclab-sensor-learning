@@ -164,14 +164,14 @@ class PoseEvaluationEnv(DirectRLEnv):
         # self.scene.update(self.sim.get_physics_dt())
         # check if the robot's end-effector is close to the goal pose
 
-        robot_base_w = self.robot.data.root_pose_w.torch
-        robot_eef_w = self.robot.data.body_pose_w.torch[:, self.robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
-        # position
-        robot_positions_b = torch.subtract(robot_eef_w[:, 0:3], robot_base_w[:, 0:3])
-        positions_close = torch.isclose(robot_positions_b[:, 0:3], self.actions[:, 0:3], atol=0.002)
-        # orientation
-        quat_diff_err = math_utils.quat_error_magnitude(self.actions[:, 3:7], robot_eef_w[:, 3:7])
-        orientations_close = torch.isclose(quat_diff_err, torch.tensor(0.0), atol=0.006)
+        # robot_base_w = self.robot.data.root_pose_w.torch
+        # robot_eef_w = self.robot.data.body_pose_w.torch[:, self.robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
+        # # position
+        # robot_positions_b = torch.subtract(robot_eef_w[:, 0:3], robot_base_w[:, 0:3])
+        # positions_close = torch.isclose(robot_positions_b[:, 0:3], self.actions[:, 0:3], atol=0.002)
+        # # orientation
+        # quat_diff_err = math_utils.quat_error_magnitude(self.actions[:, 3:7], robot_eef_w[:, 3:7])
+        # orientations_close = torch.isclose(quat_diff_err, torch.tensor(0.0), atol=0.006)
 
         # manually update Camera positions to ensure they are in sync with the robot's end-effector
         for sensor in self.sensors.values():

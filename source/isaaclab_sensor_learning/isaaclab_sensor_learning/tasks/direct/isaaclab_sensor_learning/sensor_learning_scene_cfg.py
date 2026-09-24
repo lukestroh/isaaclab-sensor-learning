@@ -31,7 +31,7 @@ class SensorLearningSceneCfg(InteractiveSceneCfg):
             random_choice=False,
             rigid_props=RigidBodyBaseCfg(),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 2.5, 0.0)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 2.0, 0.0)),
     )
 
     robot: ArticulationCfg = AG_ROBOT_UR10e_CFG
