@@ -62,6 +62,7 @@ class BinnedTree:
             )
             for i in range(n_envs)
         }
+        return
 
     def _create_rgb_bins(self):
         h, w = self.uv_img.shape[:2]
@@ -141,7 +142,7 @@ def _extract_id_to_labels(info: dict | None) -> dict:
     return instance_info.get("idToLabels") or instance_info.get("idsToLabels") or {}
 
 
-class CoverageEvaluator:
+class NBVEvaluator:
     def __init__(
         self,
         trial_data: dict,
