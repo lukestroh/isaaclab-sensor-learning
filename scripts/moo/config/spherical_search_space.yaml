@@ -1,0 +1,13 @@
+attachment:
+  type: spherical
+  radius: [0.03, 0.5]
+  azimuth_deg: [0, 180]
+  polar_deg: [0, 180]
+sensors:
+  allowed: ['vl53l8cx',]
+  min_total: 1
+  max_total: 20
+constraints:
+  min_spacing: 0.02
+  tolerance: 1e-6
+  mesh_points: 8000

@@ -29,7 +29,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 import isaaclab_sensor_learning.tasks  # noqa: F401
 import data_utils.data_logger as data_logger
-import data_utils.pose_generator as pose_generator
+import scripts.utils.pose_generator as pose_generator
 import pprint as pp
 import os
 import re

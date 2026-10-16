@@ -33,8 +33,9 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 import isaaclab_sensor_learning.tasks  # noqa: F401
 
-import data_utils.capture_data_logger as data_logger
-import data_utils.pose_generator as pose_generator
+import data_utils.capture_data_logger as capture_data_logger
+import data_utils.evaluation_data_logger as evaluation_data_logger
+import scripts.utils.pose_generator as pose_generator
 import pprint as pp
 import os
 import re
@@ -75,7 +76,8 @@ def main():
     cuda_device = env.unwrapped.device
 
     # Set up data logger
-    dlog = data_logger.CaptureDataLogger(process_type="capture")
+    dlog = capture_data_logger.CaptureDataLogger()
+
 
     # Generate discrete poses
     r_range = (0.9, 1.4)
@@ -120,6 +122,7 @@ def main():
         "phi_ori_range": phi_ori_range,
         "phi_ori_size": phi_ori_size,
         "poses": discrete_poses,
+        "n_poses": discrete_poses.shape[0],
         "robot_joint_names": robot.data.joint_names,
         "robot_body_names": robot.data.body_names,
     }
@@ -199,9 +202,7 @@ def main():
         }
     dlog.save_trial_metadata(trial_metadata=trial_metadata)
     dlog.save_tree_metadata(tree_metadata=tree_metadata)
-    dlog.save_sensor_metadata(
-        sensor_metadata=sensor_metadata, n_poses=discrete_poses.shape[0], num_envs=env.unwrapped.cfg.num_envs
-    )
+    dlog.save_sensor_metadata(sensor_metadata=sensor_metadata, n_poses=discrete_poses.shape[0])
 
     # simulate environment
     pose_idx = 0
@@ -241,7 +242,6 @@ def main():
             )
             # step
             observations, rewards, terminated, truncated, info = env.step(actions)
-            # print(observations["tof0"].info)
             step_count += 1
 
             # check if the robot's end-effector is close to the goal pose
@@ -254,6 +254,9 @@ def main():
             quat_diff_err = math_utils.quat_error_magnitude(actions[:, 3:7], robot_eef_w[:, 3:7])
             orientations_close = torch.isclose(quat_diff_err, torch.tensor(0.0), atol=0.006)
 
+            # joint states
+            robot_joint_pos = robot.data.joint_pos.torch
+
             # for sensor_name, sensor in sensors.items():
             #     # print(sensor.data.output['rgb'].torch)
             #     print(sensor.data.info['instance_segmentation_fast'])
@@ -263,16 +266,18 @@ def main():
             # print(robot_eef_pos_b[:, 0:3])
             if step_count > max_steps:
                 max_steps = step_count
-
+            
             # save observations and poses if the robot's end-effector is close to the goal pose
             if positions_close.all() and orientations_close.all():
                 if pose_idx >= len(discrete_poses):
-                    dlog.save_pose_observations(
-                        observations=observations, poses=robot_eef_w, idx=pose_idx, last_obs=True
-                    )
+                    dlog.save_pose_observations(observations=observations, idx=pose_idx, last_obs=True)
+                    dlog.save_actual_poses(poses=robot_eef_w, idx=pose_idx, last_obs=True)
+                    dlog.save_joint_state(joint_state=robot_joint_pos, idx=pose_idx, last_obs=True)
                     break
                 else:
-                    dlog.save_pose_observations(observations=observations, poses=robot_eef_w, idx=pose_idx)
+                    dlog.save_pose_observations(observations=observations, idx=pose_idx)
+                    dlog.save_actual_poses(poses=robot_eef_w, idx=pose_idx)
+                    dlog.save_joint_state(joint_state=robot_joint_pos, idx=pose_idx)
                 # break  # remove after testing
 
                 print(f"  --  avg steps: {avg_step_count:.2f} -- max steps: {max_steps}", end="")
@@ -290,8 +295,10 @@ def main():
                         f"\n[WARNING]: Step count exceeded {step_count_limit} for pose {pose_idx}, continuing to next pose."
                     )
                     dlog.save_pose_observations(
-                        observations=observations, poses=robot_eef_w, idx=pose_idx
+                        observations=observations, idx=pose_idx
                     )  # save observations even if not reached goal. change later?
+                    dlog.save_actual_poses(poses=robot_eef_w, idx=pose_idx)
+                    dlog.save_joint_state(joint_state=robot_joint_pos, idx=pose_idx)
                     skipped_poses.append(pose_idx)
                     total_steps += step_count
                     step_count = 0

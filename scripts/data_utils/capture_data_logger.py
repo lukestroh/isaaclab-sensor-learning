@@ -12,29 +12,33 @@ import pprint as pp
 
 
 class CaptureDataLogger:
-    def __init__(self, process_type: str, compression_level: int = 9):
-        self.TARGET_CHUNK_BYTES = 64 * 1024 * 1024  # 64 MB
-        self.process_type = "capture"
+    def __init__(self, process_type: str = "capture", compression_level: int = 9):
+        self.process_type = process_type
         self.datafile_path, self.trial_name = self.get_file_path()
+
+        # sensor data stuff
         self.sensor_obs_buf = {}
-        self.actual_poses_buf = []
-        self.idx_buf = []
+        self.sensor_chunk_size_dict = {}
+        self.sensor_curr_idx_tracker = {}
+        self._actual_poses_buf = []
+        self._actual_poses_idx_buf = []
+        self._joint_state_buf = []
+        self._joint_state_idx_buf = []
+
         # self.row_cursor = 0
         self.flush_every = None
         self.labels_dict = {"semantic_labels": {}, "instance_labels": {}}
         self.compression_level = compression_level
         return
 
-    def _get_chunk_steps(self, data_size: tuple, dtype: np.dtype, target_chunk_bytes=1_000_000) -> int:
-        row_bytes = np.prod(data_size) * np.dtype(dtype)
-        chunk_steps = max(1, target_chunk_bytes // row_bytes)
+    def _get_chunk_steps(self, data_size: tuple, dtype: np.dtype, target_chunk_bytes=1024**2) -> int:
+        row_bytes = np.prod(data_size) * np.dtype(dtype).itemsize
+        chunk_steps = int(min(self.n_poses, max(1, target_chunk_bytes // row_bytes)))
         return chunk_steps
 
-    def _get_camera_observation_buffer(self) -> dict:
+    def _make_camera_observation_buffer(self) -> dict[str, list]:
         buf = {
-            "position_w": [],
-            "quat_w_world": [],
-            "joint_state": [],
+            "pose_w": [],
             "intrinsic_matrix": [],
             "rgb": [],
             "depth": [],
@@ -43,6 +47,38 @@ class CaptureDataLogger:
             "normals": [],
         }
         return buf
+
+    def _make_sensor_chunk_size_dict(self) -> dict[str, int]:
+        _dict = {
+            "pose_w": 0,
+            "intrinsic_matrix": 0,
+            "rgb": 0,
+            "depth": 0,
+            "instance_segmentation": 0,
+            "semantic_segmentation": 0,
+            "normals": 0,
+        }
+        return _dict
+
+    def _make_sensor_idx_tracker_dict(self) -> dict[str, list]:
+        _dict = {
+            "pose_w": [],
+            "intrinsic_matrix": [],
+            "rgb": [],
+            "depth": [],
+            "instance_segmentation": [],
+            "semantic_segmentation": [],
+            "normals": [],
+        }
+        return _dict
+
+    def _make_data_shapes_dict(self) -> dict[str, tuple]:
+        _dict = {"pose_w": (self.n_envs, self.n_poses, 7)}
+        return _dict
+
+    def _reshape_tensor_to_numpy(self, tensors: list[torch.Tensor], shape: tuple = (0, 1)) -> np.ndarray:
+        """Reshape a tensor of (n_poses, n_envs, ...) to numpy array of shape (n_envs, n_poses, ...)."""
+        return torch.stack(tensors).transpose(*shape).cpu().numpy()
 
     def get_file_path(self) -> tuple[str, str]:
         """
@@ -65,9 +101,12 @@ class CaptureDataLogger:
         for i in range(trial_metadata["num_envs"]):
             self.labels_dict["instance_labels"][f"env_{i}"] = {}
 
+        self.n_envs = trial_metadata["num_envs"]
+        self.n_poses = trial_metadata["n_poses"]
+
         # Save trial metadata to HDF5 file
         with h5.File(self.datafile_path, "w") as file:
-            file.attrs["trial_name"] = trial_metadata["trial_name"]
+            file.attrs["datetime_id"] = trial_metadata["datetime_id"]
             file.attrs["seed"] = trial_metadata["seed"]
             file.attrs["num_envs"] = trial_metadata["num_envs"]
             # desired poses
@@ -82,33 +121,35 @@ class CaptureDataLogger:
             desired_poses_group.attrs["theta_ori_size"] = trial_metadata["theta_ori_size"]
             desired_poses_group.attrs["phi_ori_range"] = trial_metadata["phi_ori_range"]
             desired_poses_group.attrs["phi_ori_size"] = trial_metadata["phi_ori_size"]
-
             desired_poses_group.create_dataset(
-                "eef_poses", data=trial_metadata["poses"], compression="gzip", compression_opts=self.compression_level
+                name="eef_poses",
+                data=trial_metadata["poses"],
+                compression="gzip",
+                compression_opts=self.compression_level,
             )
 
             # actual poses
             actual_poses_group = file.require_group("poses/actual_poses")
-            actual_poses_group.create_dataset(
+            data_shape = (self.n_envs, len(trial_metadata["poses"]), 7)
+            self.actual_poses_chunk_steps = self._get_chunk_steps(data_size=(self.n_envs, 7), dtype=np.float32)
+            actual_poses_group.require_dataset(
                 name="eef_poses",
-                shape=(trial_metadata["num_envs"], len(trial_metadata["poses"]), 7),
+                shape=(self.n_envs, self.n_poses, 7),
                 dtype=np.float32,
+                chunks=(self.n_envs, self.actual_poses_chunk_steps, 7),
                 compression="gzip",
                 compression_opts=self.compression_level,
             )
 
             # joint states
             joint_states_group = file.require_group("joint_states")
+            n_joints = len(trial_metadata["robot_joint_names"])
+            data_shape = (self.n_envs, self.n_poses, len(trial_metadata["robot_joint_names"]))
+            self.joint_state_chunk_steps = self._get_chunk_steps(data_size=(self.n_envs, n_joints), dtype=np.float32)
             joint_states_group.require_dataset(
                 name="joint_state",
-                shape=(
-                    trial_metadata["num_envs"],
-                    len(trial_metadata["poses"]),
-                    len(trial_metadata["robot_joint_names"]),
-                ),
-                chunks=self._get_entries_per_chunk(
-                    trial_metadata["num_envs"], (len(trial_metadata["poses"]), len(trial_metadata["robot_joint_names"]))
-                ),
+                shape=data_shape,
+                chunks=(self.n_envs, self.joint_state_chunk_steps, n_joints),
                 dtype=np.float32,
                 compression="gzip",
                 compression_opts=self.compression_level,
@@ -135,35 +176,66 @@ class CaptureDataLogger:
 
         return
 
-    def save_sensor_metadata(self, sensor_metadata: dict, n_poses: int, num_envs: int) -> None:
+    def save_sensor_metadata(self, sensor_metadata: dict, n_poses: int) -> None:
+        """I apologize to future me for this function"""
         with h5.File(self.datafile_path, "a") as file:
             for sensor_name, sensor_info in sensor_metadata.items():
-                self.sensor_obs_buf[sensor_name] = self._get_camera_observation_buffer()
+                # Set up buffer dicts
+                self.sensor_obs_buf[sensor_name] = self._make_camera_observation_buffer()
+                self.sensor_chunk_size_dict[sensor_name] = self._make_sensor_chunk_size_dict()
+                self.sensor_curr_idx_tracker[sensor_name] = self._make_sensor_idx_tracker_dict()
+
+                # Sensor group
                 sensor_group = file.require_group(f"sensors/{sensor_name}")
                 for key, value in sensor_info.items():
                     sensor_group.attrs[key] = value
 
+                self.sensor_chunk_size_dict[sensor_name]["pose_w"] = self._get_chunk_steps(
+                    data_size=(self.n_envs, 7), dtype=np.float32
+                )
+                self.sensor_chunk_size_dict[sensor_name]["intrinsic_matrix"] = self._get_chunk_steps(
+                    data_size=(self.n_envs, 3, 3), dtype=np.float32
+                )
+                self.sensor_chunk_size_dict[sensor_name]["rgb"] = self._get_chunk_steps(
+                    data_size=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"], 3), dtype=np.float32
+                )
+                self.sensor_chunk_size_dict[sensor_name]["depth"] = self._get_chunk_steps(
+                    data_size=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"]), dtype=np.float32
+                )
+                self.sensor_chunk_size_dict[sensor_name]["instance_segmentation"] = self._get_chunk_steps(
+                    data_size=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"]), dtype=np.float32
+                )
+                self.sensor_chunk_size_dict[sensor_name]["semantic_segmentation"] = self._get_chunk_steps(
+                    data_size=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"]), dtype=np.float32
+                )
+                self.sensor_chunk_size_dict[sensor_name]["normals"] = self._get_chunk_steps(
+                    data_size=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"], 3), dtype=np.float32
+                )
                 sensor_group.require_dataset(
-                    name="pose",
-                    shape=(num_envs, n_poses, 7),
-                    chunks=self._get_entries_per_chunk(num_envs, (n_poses, 7)),
+                    name="pose_w",
+                    shape=(self.n_envs, n_poses, 7),
+                    chunks=(self.n_envs, self.sensor_chunk_size_dict[sensor_name]["pose_w"], 7),
                     dtype=np.float32,
                     compression="gzip",
                     compression_opts=self.compression_level,
                 )
                 sensor_group.require_dataset(
                     name="intrinsic_matrix",
-                    shape=(num_envs, n_poses, 3, 3),
-                    chunks=self._get_entries_per_chunk(num_envs, (n_poses, 3, 3)),
+                    shape=(self.n_envs, n_poses, 3, 3),
+                    chunks=(self.n_envs, self.sensor_chunk_size_dict[sensor_name]["intrinsic_matrix"], 3, 3),
                     dtype=np.float32,
                     compression="gzip",
                     compression_opts=self.compression_level,
                 )
                 sensor_group.require_dataset(
                     name="rgb",
-                    shape=(num_envs, n_poses, sensor_info["height"], sensor_info["width"], 3),
-                    chunks=self._get_entries_per_chunk(
-                        num_envs, (n_poses, sensor_info["height"], sensor_info["width"], 3)
+                    shape=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"], 3),
+                    chunks=(
+                        self.n_envs,
+                        self.sensor_chunk_size_dict[sensor_name]["rgb"],
+                        sensor_info["height"],
+                        sensor_info["width"],
+                        3,
                     ),
                     dtype=np.float32,
                     compression="gzip",
@@ -171,9 +243,12 @@ class CaptureDataLogger:
                 )
                 sensor_group.require_dataset(
                     name="depth",
-                    shape=(num_envs, n_poses, sensor_info["height"], sensor_info["width"]),
-                    chunks=self._get_entries_per_chunk(
-                        num_envs, (n_poses, sensor_info["height"], sensor_info["width"])
+                    shape=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"]),
+                    chunks=(
+                        self.n_envs,
+                        self.sensor_chunk_size_dict[sensor_name]["depth"],
+                        sensor_info["height"],
+                        sensor_info["width"],
                     ),
                     dtype=np.float32,
                     compression="gzip",
@@ -181,9 +256,12 @@ class CaptureDataLogger:
                 )
                 sensor_group.require_dataset(
                     name="instance_segmentation",
-                    shape=(num_envs, n_poses, sensor_info["height"], sensor_info["width"]),
-                    chunks=self._get_entries_per_chunk(
-                        num_envs, (n_poses, sensor_info["height"], sensor_info["width"])
+                    shape=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"]),
+                    chunks=(
+                        self.n_envs,
+                        self.sensor_chunk_size_dict[sensor_name]["instance_segmentation"],
+                        sensor_info["height"],
+                        sensor_info["width"],
                     ),
                     dtype=np.float32,
                     compression="gzip",
@@ -191,9 +269,12 @@ class CaptureDataLogger:
                 )
                 sensor_group.require_dataset(
                     name="semantic_segmentation",
-                    shape=(num_envs, n_poses, sensor_info["height"], sensor_info["width"]),
-                    chunks=self._get_entries_per_chunk(
-                        num_envs, (n_poses, sensor_info["height"], sensor_info["width"])
+                    shape=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"]),
+                    chunks=(
+                        self.n_envs,
+                        self.sensor_chunk_size_dict[sensor_name]["semantic_segmentation"],
+                        sensor_info["height"],
+                        sensor_info["width"],
                     ),
                     dtype=np.float32,
                     compression="gzip",
@@ -201,9 +282,13 @@ class CaptureDataLogger:
                 )
                 sensor_group.require_dataset(
                     name="normals",
-                    shape=(num_envs, n_poses, sensor_info["height"], sensor_info["width"], 3),
-                    chunks=self._get_entries_per_chunk(
-                        num_envs, (n_poses, sensor_info["height"], sensor_info["width"], 3)
+                    shape=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"], 3),
+                    chunks=(
+                        self.n_envs,
+                        self.sensor_chunk_size_dict[sensor_name]["normals"],
+                        sensor_info["height"],
+                        sensor_info["width"],
+                        3,
                     ),
                     dtype=np.float32,
                     compression="gzip",
@@ -211,48 +296,10 @@ class CaptureDataLogger:
                 )
         return
 
-    def _get_entries_per_chunk(self, n_poses: int, data_shape: tuple, dtype=np.float32) -> tuple:
-        bytes_per_entry = np.empty(data_shape, dtype=dtype).itemsize * 16  # 4x4 matrix
-        entries_per_chunk = min(n_poses, self.TARGET_CHUNK_BYTES // bytes_per_entry)
-        return tuple([entries_per_chunk] + list(data_shape))
-
-    def _reshape_tensor_to_numpy(self, tensors: list[torch.Tensor], shape: tuple = (0, 1)) -> np.ndarray:
-        """Reshape a tensor of (n_poses, n_envs, ...) to numpy array of shape (n_envs, n_poses, ...)."""
-        return torch.stack(tensors).transpose(*shape).detach().cpu().numpy()
-
-    # def save_observations(self, observations: dict[str, CameraData], poses: torch.Tensor, idx: int) -> None:
-    #     for sensor_name, sensor_data in observations.items():
-    #         # print(list(zip(sensor_data.info["instance_segmentation_fast"].keys(), sensor_data.info["instance_segmentation_fast"].values())))
-    #         with h5.File(self.datafile_path, "a") as file:
-    #             sensor_group = file.require_group(f"sensors/{sensor_name}")
-    #             sensor_group["pose"][:, idx, :] = torch.cat([sensor_data.pos_w.torch, sensor_data.quat_w_world.torch], dim=-1).detach().cpu().numpy()
-    #             sensor_group["intrinsic_matrix"][:, idx, :, :] = sensor_data.intrinsic_matrices.torch.detach().cpu().numpy()
-    #             sensor_group["rgb"][:, idx, :, :, :] = sensor_data.output["rgb"].torch.detach().cpu().numpy()
-    #             sensor_group["depth"][:, idx, :, :] = sensor_data.output["depth"].torch.squeeze(-1).detach().cpu().numpy()
-    #             sensor_group["instance_segmentation"][:, idx, :, :] = sensor_data.output[
-    #                 "instance_segmentation_fast"
-    #             ].torch.squeeze(-1).detach().cpu().numpy()
-    #             id_to_labels = sensor_data.info["instance_segmentation_fast"]['idToLabels']
-    #             sensor_group["instance_labels"][:, idx, :, :] = list(zip(id_to_labels.keys(), id_to_labels.values()))
-    #             sensor_group["semantic_segmentation"][:, idx, :, :] = sensor_data.output[
-    #                 "semantic_segmentation"
-    #             ].torch.squeeze(-1).detach().cpu().numpy()
-    #             # sensor_group["semantic_segmentation"].attrs["semantic_labels"] = sensor_data.info["semantic_segmentation"]
-    #             sensor_group["normals"][:, idx, :, :, :] = sensor_data.output["normals"].torch.detach().cpu().numpy()
-
-    #     return
-
-    def save_pose_observations(
-        self, observations: dict[str, CameraData], poses: torch.Tensor, idx: int, last_obs: bool = False
-    ) -> None:
-        """Save observations and poses to HDF5 file. Flushes buffers every N observations or if last_obs is True."""
-        # print(poses.shape)
-
-        # # append actual poses to buffer
-        # print(f"POSES: ", poses.detach().cpu().numpy())
-        self.actual_poses_buf.append(poses.detach().cpu().numpy())
-        self.idx_buf.append(idx)
-
+    def save_pose_observations(self, observations: dict[str, CameraData], idx: int, last_obs: bool = False) -> None:
+        """
+        Save observations and poses to HDF5 file. Flushes buffers every chunk_step observations or if last_obs is True.
+        """
         # add semantic and instance labels to labels_dict
         for sensor_name, sensor_data in observations.items():
             semantic_labels_dict = sensor_data.info["semantic_segmentation"]
@@ -267,8 +314,8 @@ class CaptureDataLogger:
 
         # append sensor data to buffers
         for sensor_name, sensor_data in observations.items():
-            self.sensor_obs_buf[sensor_name]["position_w"].append(sensor_data.pos_w.torch)
-            self.sensor_obs_buf[sensor_name]["quat_w_world"].append(sensor_data.quat_w_world.torch)
+            sensor_pose_w = torch.cat([sensor_data.pos_w.torch, sensor_data.quat_w_world.torch], axis=1)  # save as pose
+            self.sensor_obs_buf[sensor_name]["pose_w"].append(sensor_pose_w)
             self.sensor_obs_buf[sensor_name]["intrinsic_matrix"].append(sensor_data.intrinsic_matrices.torch)
             self.sensor_obs_buf[sensor_name]["rgb"].append(sensor_data.output["rgb"].torch)
             self.sensor_obs_buf[sensor_name]["depth"].append(sensor_data.output["depth"].torch)
@@ -280,62 +327,60 @@ class CaptureDataLogger:
             )
             self.sensor_obs_buf[sensor_name]["normals"].append(sensor_data.output["normals"].torch)
 
-        flush = False
-        len_buffers = len(self.sensor_obs_buf[sensor_name]["position_w"])
-        if len_buffers >= 1 or last_obs:  # flush every N observations or if it's the last observation
-            for sensor_name in observations.keys():
-                flush = True
-                # reshape data to (num_envs, n_poses, ...) and save to HDF5
-                chunked_positions = self._reshape_tensor_to_numpy(self.sensor_obs_buf[sensor_name]["position_w"])
-                chunked_quats = self._reshape_tensor_to_numpy(self.sensor_obs_buf[sensor_name]["quat_w_world"])
-                chunked_poses = np.concatenate([chunked_positions, chunked_quats], axis=-1)
-                chunked_intrinsics = self._reshape_tensor_to_numpy(self.sensor_obs_buf[sensor_name]["intrinsic_matrix"])
-                chunked_rgbs = self._reshape_tensor_to_numpy(self.sensor_obs_buf[sensor_name]["rgb"])
-                chunked_depths = self._reshape_tensor_to_numpy(self.sensor_obs_buf[sensor_name]["depth"]).squeeze(
-                    axis=-1
-                )
-                chunked_instance_segs = self._reshape_tensor_to_numpy(
-                    self.sensor_obs_buf[sensor_name]["instance_segmentation"]
-                ).squeeze(axis=-1)
-                chunked_semantic_segs = self._reshape_tensor_to_numpy(
-                    self.sensor_obs_buf[sensor_name]["semantic_segmentation"]
-                ).squeeze(axis=-1)
-                chunked_normals = self._reshape_tensor_to_numpy(self.sensor_obs_buf[sensor_name]["normals"])
+        for sensor_name in observations.keys():
+            for data_type, target_chunk_size in self.sensor_chunk_size_dict[sensor_name].items():
+                self.sensor_curr_idx_tracker[sensor_name][data_type].append(idx)
+                if (len(self.sensor_obs_buf[sensor_name][data_type]) >= target_chunk_size) or last_obs:
+                    if data_type in ["depth", "instance_segmentation", "semantic_segmentation"]:
+                        chunked_data = self._reshape_tensor_to_numpy(
+                            self.sensor_obs_buf[sensor_name][data_type]
+                        ).squeeze(-1)
+                    else:
+                        chunked_data = self._reshape_tensor_to_numpy(self.sensor_obs_buf[sensor_name][data_type])
 
-                self.sensor_obs_buf[sensor_name]["position_w"].clear()
-                self.sensor_obs_buf[sensor_name]["quat_w_world"].clear()
-                self.sensor_obs_buf[sensor_name]["intrinsic_matrix"].clear()
-                self.sensor_obs_buf[sensor_name]["rgb"].clear()
-                self.sensor_obs_buf[sensor_name]["depth"].clear()
-                self.sensor_obs_buf[sensor_name]["instance_segmentation"].clear()
-                self.sensor_obs_buf[sensor_name]["semantic_segmentation"].clear()
-                self.sensor_obs_buf[sensor_name]["normals"].clear()
+                    start_idx = self.sensor_curr_idx_tracker[sensor_name][data_type][0]
+                    end_idx = self.sensor_curr_idx_tracker[sensor_name][data_type][-1] + 1  # +1 because slicing
 
-                start_idx = self.idx_buf[0]
-                end_idx = self.idx_buf[-1] + 1  # +1 because slicing
+                    # Save the buffered observations
+                    with h5.File(self.datafile_path, "a") as file:
+                        sensor_group = file.require_group(f"sensors/{sensor_name}")
+                        sensor_group[data_type][:, start_idx:end_idx, :] = chunked_data
+                    self.sensor_curr_idx_tracker[sensor_name][data_type].clear()
+                    self.sensor_obs_buf[sensor_name][data_type].clear()
+        return
 
-                # Save the buffered observations
-                with h5.File(self.datafile_path, "a") as file:
-                    sensor_group = file.require_group(f"sensors/{sensor_name}")
-                    sensor_group["pose"][:, start_idx:end_idx, :] = chunked_poses
-                    sensor_group["intrinsic_matrix"][:, start_idx:end_idx, :] = chunked_intrinsics
-                    sensor_group["rgb"][:, start_idx:end_idx, :] = chunked_rgbs
-                    sensor_group["depth"][:, start_idx:end_idx, :] = chunked_depths
-                    sensor_group["instance_segmentation"][:, start_idx:end_idx, :] = chunked_instance_segs
-                    sensor_group["semantic_segmentation"][:, start_idx:end_idx, :] = chunked_semantic_segs
-                    sensor_group["normals"][:, start_idx:end_idx, :] = chunked_normals
-
-        if flush:
-            # Save the actual poses
-            stacked_poses = np.stack(self.actual_poses_buf, axis=1)  # shape: (num_envs, n_poses, 7)
+    def save_actual_poses(self, poses: torch.Tensor, idx: int, last_obs: bool = False) -> None:
+        self._actual_poses_buf.append(poses.cpu().numpy())
+        self._actual_poses_idx_buf.append(idx)
+        if (len(self._actual_poses_buf) >= self.actual_poses_chunk_steps) or last_obs:
+            print("FLUSH: poses")
+            start_idx = self._actual_poses_idx_buf[0]
+            end_idx = self._actual_poses_idx_buf[-1] + 1
+            stacked_poses = np.stack(self._actual_poses_buf, axis=1)
             with h5.File(self.datafile_path, "a") as file:
                 pose_group = file.require_group("poses/actual_poses")
-                pose_group["eef_poses"][:, start_idx:end_idx, :] = stacked_poses
+                dset_poses = pose_group["eef_poses"]
+                dset_poses[:, start_idx:end_idx, :] = stacked_poses
 
-            self.actual_poses_buf.clear()
-            self.idx_buf.clear()
-            flush = False
+            self._actual_poses_buf.clear()
+            self._actual_poses_idx_buf.clear()
+        return
 
+    def save_joint_state(self, joint_state: torch.Tensor, idx: int, last_obs: bool = False) -> None:
+        self._joint_state_buf.append(joint_state.cpu().numpy())
+        self._joint_state_idx_buf.append(idx)
+        if (len(self._joint_state_buf) >= self.joint_state_chunk_steps) or last_obs:
+            print("FLUSH: Joint state")
+            start_idx = self._joint_state_idx_buf[0]
+            end_idx = self._joint_state_idx_buf[-1] + 1
+            stacked_joint_states = np.stack(self._joint_state_buf, axis=1)
+            with h5.File(self.datafile_path, 'a') as file:
+                group_joint_states = file.require_group("joint_states")
+                dset_joint_states = group_joint_states["joint_state"]
+                dset_joint_states[:, start_idx:end_idx, :] = stacked_joint_states
+
+            self._joint_state_buf.clear()
+            self._joint_state_idx_buf.clear()
         return
 
     def save_skipped_poses(self, skipped_poses: list[int]) -> None:

@@ -54,12 +54,12 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 # from isaaclab_sensor_learning.motion_planning import diff_ik as diff_ik_mp
 from isaaclab_sensor_learning import DATA_DIR
-from isaaclab_sensor_learning.evaluation.nbv import NBVEvaluator, ObservationConfig, GainConfig
+from isaaclab_sensor_learning.nbv.nbv import NBVEvaluator, ObservationConfig, GainConfig
 import isaaclab_sensor_learning.tasks  # noqa: F401
 from isaaclab_sensor_learning.utils import h5py_utils, usd_utils
 
 import data_utils.evaluation_data_logger as data_logger
-import data_utils.pose_generator as pose_generator
+import scripts.utils.pose_generator as pose_generator
 
 import pprint as pp
 
@@ -140,7 +140,7 @@ def main():
     # Coverage evaluator
     observation_cfg = ObservationConfig()
     gain_cfg = GainConfig()
-    coverage_evaluator = NBVEvaluator(
+    nbv_evaluator = NBVEvaluator(
         n_envs=num_envs,
         trial_data=trial_data_dict,
         observation_config=observation_cfg,
@@ -152,15 +152,15 @@ def main():
     robot_base_w = robot.data.root_pose_w.torch
 
     # compute the next best pose to move to based on the current end-effector pose and the trial data
-    closest_idxs = coverage_evaluator.get_closest_pose_idxs(curr_poses=robot_eef_w)
-    best_poses = coverage_evaluator.compute_env_info_gain_from_pose_idxs(
+    closest_idxs = nbv_evaluator.get_closest_pose_idxs(curr_poses=robot_eef_w)
+    best_poses = nbv_evaluator.compute_env_info_gain_from_pose_idxs(
         env_ids=torch.arange(num_envs), closest_idxs=closest_idxs, trial_data_dict=trial_data_dict
     )
     current_poses = best_poses.clone().detach()
     env_idxs = best_poses[:, 0]
     pose_idxs = best_poses[:, 1]
 
-    goal_pose_w = coverage_evaluator.poses[env_idxs, pose_idxs].clone().detach()
+    goal_pose_w = nbv_evaluator.poses[env_idxs, pose_idxs].clone().detach()
     goal_position_b = torch.subtract(goal_pose_w[env_idxs, 0:3], robot_base_w[env_idxs, 0:3])
 
     actions = torch.cat((goal_position_b, goal_pose_w[env_idxs, 3:7]), dim=1)
@@ -182,10 +182,8 @@ def main():
 
             # Get observations and save the sparse bin updates
             observations, rewards, terminated, truncated, info = env.step(actions)
-            info_gains, dense_bin_updates, sparse_bin_updates = (
-                coverage_evaluator.update_bin_count_scores_from_observation(
-                    env_ids=torch.arange(num_envs), observations=observations
-                )
+            info_gains, dense_bin_updates, sparse_bin_updates = nbv_evaluator.update_bin_count_scores_from_observation(
+                env_ids=torch.arange(num_envs), observations=observations
             )
             dlog.save_sparse_bin_counts(timestamp=curr_time, sparse_bin_updates=sparse_bin_updates, last_obs=last_obs)
 
@@ -234,11 +232,11 @@ def main():
                 # Compute the next best pose to move to based on the current end-effector pose and the trial data.
                 # Remove seen poses so we don't get redundant locations.
                 # Update actions
-                closest_idxs = coverage_evaluator.get_closest_pose_idxs(curr_poses=robot_eef_w)
+                closest_idxs = nbv_evaluator.get_closest_pose_idxs(curr_poses=robot_eef_w)
                 unseen_closest_idxs = closest_idxs[~closest_idxs.unsqueeze(1).eq(seen_pose_idxs).all(-1).any(-1)]
                 if unseen_closest_idxs.numel() == 0:
                     raise ValueError("no unseen_closes_idxs")
-                best_pose_idxs = coverage_evaluator.compute_env_info_gain_from_pose_idxs(
+                best_pose_idxs = nbv_evaluator.compute_env_info_gain_from_pose_idxs(
                     env_ids=envs_change_goal, closest_idxs=unseen_closest_idxs, trial_data_dict=trial_data_dict
                 )
                 if best_pose_idxs.numel() == 0:
@@ -246,7 +244,7 @@ def main():
                     raise ValueError("no best poses")
                 env_idxs = best_pose_idxs[:, 0]
                 pose_idxs = best_pose_idxs[:, 1]
-                goal_pose_w = coverage_evaluator.poses[env_idxs, pose_idxs].clone().detach()
+                goal_pose_w = nbv_evaluator.poses[env_idxs, pose_idxs].clone().detach()
                 goal_position_b = torch.subtract(goal_pose_w[:, 0:3], robot_base_w[env_idxs, 0:3])
                 goal_pose_b = torch.cat((goal_position_b, goal_pose_w[:, 3:7]), dim=1)
                 actions[env_idxs] = goal_pose_b
@@ -259,9 +257,10 @@ def main():
                 current_poses[env_idxs] = best_pose_idxs
 
             if last_obs:
+                dlog.save_bin_counts(bin_counts=nbv_evaluator.binned_tree.bin_counts)
                 break
 
-            for env_key, env_bin_counts in coverage_evaluator.binned_tree.bin_counts.items():
+            for env_key, env_bin_counts in nbv_evaluator.binned_tree.bin_counts.items():
                 more_than_5_counts_mask = torch.nonzero(env_bin_counts >= 5, as_tuple=False)
                 num_completed_bins = torch.numel(more_than_5_counts_mask)
                 env_total_bins = np.prod(tuple(env_bin_counts.shape))

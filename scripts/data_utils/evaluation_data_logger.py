@@ -8,7 +8,7 @@ from typing import Any
 
 
 class EvaluationDataLogger:
-    def __init__(self, capture_data_dict):
+    def __init__(self, capture_data_dict, compression_level: int = 9):
         self.process_type = "evaluation"
         self.capture_data_dict = capture_data_dict
         self.n_envs = capture_data_dict["n_envs"]
@@ -17,11 +17,13 @@ class EvaluationDataLogger:
         self._timestamp_buf = []
         self._joint_position_buf = []
         self._pose_buf = []
+
+        self.compression_level = compression_level
         return
 
-    def _get_chunk_steps(self, data_size: tuple, dtype: np.dtype, target_chunk_bytes: int = 512_000) -> int:
+    def _get_chunk_steps(self, data_size: tuple, dtype: np.dtype, target_chunk_bytes: int = 1024**2) -> int:
         row_bytes = np.prod(data_size) * np.dtype(dtype).itemsize
-        chunk_steps = max(1, target_chunk_bytes // row_bytes)
+        chunk_steps = int(max(1, target_chunk_bytes // row_bytes))
         return chunk_steps
 
     def get_file_path(self) -> tuple[str, str]:
@@ -60,7 +62,13 @@ class EvaluationDataLogger:
         self.timestamp_chunk_steps = self._get_chunk_steps(data_size=data_size, dtype=np.float32)
         with h5.File(self.datafile_path, "a") as file:
             ts_dset = file.require_dataset(
-                name="timestamp", shape=(0,), maxshape=(None,), chunks=(self.timestamp_chunk_steps,), dtype=np.float32
+                name="timestamp",
+                shape=(0,),
+                maxshape=(None,),
+                chunks=(self.timestamp_chunk_steps,),
+                dtype=np.float32,
+                compression="gzip",
+                compression_opts=self.compression_level,
             )
             ts_dset.attrs["physics_dt"] = timestamp_metadata["physics_dt"]
             ts_dset.attrs["decimation"] = timestamp_metadata["decimation"]
@@ -92,6 +100,8 @@ class EvaluationDataLogger:
                 maxshape=(self.n_envs, None, n_dof),
                 chunks=(self.n_envs, self.joint_position_chunk_steps, n_dof),
                 dtype=np.float32,
+                compression="gzip",
+                compression_opts=self.compression_level,
             )
         return
 
@@ -119,6 +129,8 @@ class EvaluationDataLogger:
                 maxshape=(self.n_envs, None, 7),
                 chunks=(self.n_envs, self.pose_chunk_steps, 7),
                 dtype=np.float32,
+                compression="gzip",
+                compression_opts=self.compression_level,
             )
         return
 
@@ -149,6 +161,8 @@ class EvaluationDataLogger:
                     maxshape=(None,),
                     chunks=(self.nbv_goal_chunk_steps,),
                     dtype=nbv_goal_dtype,
+                    compression="gzip",
+                    compression_opts=self.compression_level,
                 )
         return
 
@@ -174,9 +188,11 @@ class EvaluationDataLogger:
                 ("count_delta", np.int32),
             ]
         )
-        self.sparse_bin_count_chunk_steps = self._get_chunk_steps(data_size=data_size, dtype=self.sparse_bin_count_dtype)
+        self.sparse_bin_count_chunk_steps = self._get_chunk_steps(
+            data_size=data_size, dtype=self.sparse_bin_count_dtype
+        )
 
-        with h5.File(self.datafile_path, 'a') as file:
+        with h5.File(self.datafile_path, "a") as file:
             sparse_bin_updates_group = file.require_group("sparse_bin_updates")
             for env_id in range(self.n_envs):
                 sparse_bin_updates_group.require_dataset(
@@ -184,7 +200,9 @@ class EvaluationDataLogger:
                     shape=(0,),
                     maxshape=(None,),
                     chunks=(self.sparse_bin_count_chunk_steps,),
-                    dtype=self.sparse_bin_count_dtype
+                    dtype=self.sparse_bin_count_dtype,
+                    compression="gzip",
+                    compression_opts=self.compression_level,
                 )
         return
 
@@ -192,8 +210,8 @@ class EvaluationDataLogger:
         self, timestamp: float, sparse_bin_updates: dict[dict[str, torch.Tensor]], last_obs: bool = False
     ) -> None:
         # print("FLUSH: sparse_bin_counts")
-        with h5.File(self.datafile_path, 'a') as file:
-            sparse_bin_updates_group = file['sparse_bin_updates']
+        with h5.File(self.datafile_path, "a") as file:
+            group_sparse_bin_updates = file["sparse_bin_updates"]
             for env_key, env_data in sparse_bin_updates.items():
                 env_id = int(env_key.split("_")[1])
                 len_data = torch.numel(env_data["instance_idx"])
@@ -201,14 +219,39 @@ class EvaluationDataLogger:
                     continue
 
                 rows = np.zeros(len_data, dtype=self.sparse_bin_count_dtype)
-                rows["timestamp"] = timestamp # broadcast timestamp to all rowws
+                rows["timestamp"] = timestamp  # broadcast timestamp to all rowws
                 rows["instance_idx"] = env_data["instance_idx"].cpu().numpy()
                 rows["length_bin"] = env_data["length_bin"].cpu().numpy()
                 rows["theta_bin"] = env_data["theta_bin"].cpu().numpy()
                 rows["count_delta"] = env_data["count_delta"].cpu().numpy()
 
-                env_dset = sparse_bin_updates_group[f"{env_id}"]
+                env_dset = group_sparse_bin_updates[f"{env_id}"]
                 row_count = env_dset.shape[0]
                 env_dset.resize(row_count + len_data, axis=0)
-                env_dset[row_count : row_count+len_data] = rows
+                env_dset[row_count : row_count + len_data] = rows
+        return
+
+    # def save_bin_counts_metadata(self, bin_count_metadata: dict) -> None:
+    #     with h5.File(self.datafile_path, 'a') as file:
+    #         group_bin_counts = file.require_group("bin_counts")
+    #         for env_key, bin_metadata in bin_count_metadata.items():
+    #             group_bin_counts.require_dataset(
+    #                 name=env_key,
+    #                 shape=bin_metadata["shape"],
+    #                 dtype=np.float32
+    #             )
+    #     return
+
+    def save_bin_counts(self, bin_counts: dict[str, torch.Tensor]) -> None:
+        with h5.File(self.datafile_path, "a") as file:
+            group_bin_counts = file.require_group("bin_counts")
+            for env_key, env_bin_data in bin_counts.items():
+                group_bin_counts.require_dataset(
+                    name=env_key,
+                    shape=tuple(env_bin_data.shape),
+                    data=env_bin_data.cpu().numpy(),
+                    dtype=np.int32,
+                    compression="gzip",
+                    compression_opts=self.compression_level,
+                )
         return
