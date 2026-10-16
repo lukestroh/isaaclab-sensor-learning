@@ -17,7 +17,7 @@ class SensorLayoutGenerator:
 
 
 @dataclass
-class PlaneSensorLayout(SensorLayoutGenerator):
+class PlanarSensorLayout(SensorLayoutGenerator):
     """Generates a sensor layout distributed over a flat rectangular plane.
 
     Sensors are arranged in a hexagonal packing pattern centered at the
@@ -41,7 +41,11 @@ class PlaneSensorLayout(SensorLayoutGenerator):
 
     width: float
     height: float
+    sensors: list[dict]
     n_sensors: int
+    max_iter: int = 200
+    tol: float = 1e-6
+    mesh_points: int = 8000
 
     def generate_sensor_layout(self) -> dict[str, Any]:
         """Generate a hexagonally packed planar sensor layout.
@@ -162,7 +166,7 @@ def plot_sensor_layout(layout_dict: dict):
 
 
 def main():
-    lloyd_layout = PlaneSensorLayout(width=0.1, height=0.1, n_sensors=20, sensor_model="vl53l8cx")
+    lloyd_layout = PlanarSensorLayout(width=0.1, height=0.1, n_sensors=20, sensor_model="vl53l8cx")
     lloyd_layout_dict = lloyd_layout.generate_sensor_layout()
     print(lloyd_layout_dict)
 

@@ -17,11 +17,12 @@ SENSOR_CFG_DIR = os.path.join(CFG_DIR, "sensors")
 SensorCfg = CameraCfg | MultiMeshRayCasterCameraCfg
 
 
-def load_rig_yaml(rig_yaml_path: Path) -> dict:
-    """Load the rig yaml file."""
-    with open(rig_yaml_path, "r") as f:
-        rig_cfg = yaml.safe_load(f)
-    return rig_cfg
+
+def load_yaml(yaml_path: Path) -> dict:
+    """Load the yaml file."""
+    with open(yaml_path, "r") as f:
+        cfg = yaml.safe_load(f)
+    return cfg
 
 
 def load_sensor_yaml(sensor_rig_data: dict) -> dict:

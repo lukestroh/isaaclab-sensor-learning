@@ -1,31 +1,20 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import numpy as np
 import torch
 from collections.abc import Sequence
 
-import isaaclab.sim as sim_utils
-from isaaclab.assets import Articulation
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
-from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg
-from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 import isaaclab.utils.math as math_utils
 
-from isaaclab_sensor_learning import URDF_DIR, USD_DIR, DATA_DIR
-from isaaclab_sensor_learning.controllers.limit_aware_ik import LimitAwareIK
+# from isaaclab_sensor_learning.controllers.limit_aware_ik import LimitAwareIK
 from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
 import isaaclab_sensor_learning.sensor.yaml_to_cfg as yaml_to_cfg
-import isaaclab_sensor_learning.utils.usd_utils as usd_utils
-import isaaclab_sensor_learning.utils.h5py_utils as h5py_utils
 from .evaluation_env_cfg import PoseEvaluationEnvCfg
-
-import os
-import h5py
 
 
 class PoseEvaluationEnv(DirectRLEnv):
@@ -51,14 +40,14 @@ class PoseEvaluationEnv(DirectRLEnv):
         )
         self.ik_controller.reset()
 
-        # print(self.robot_entity_cfg.joint_ids)
-        self.limit_aware_ik_controller = LimitAwareIK(
-            ik_controller=self.ik_controller,
-            num_envs=self.cfg.num_envs,
-            num_joints=len(self.robot_entity_cfg.joint_ids),
-            device=self.device,
-        )
-        self.limit_aware_ik_controller.reset()
+        # # print(self.robot_entity_cfg.joint_ids)
+        # self.limit_aware_ik_controller = LimitAwareIK(
+        #     ik_controller=self.ik_controller,
+        #     num_envs=self.cfg.num_envs,
+        #     num_joints=len(self.robot_entity_cfg.joint_ids),
+        #     device=self.device,
+        # )
+        # self.limit_aware_ik_controller.reset()
 
         # actions
         self.actions = torch.zeros(
@@ -67,18 +56,8 @@ class PoseEvaluationEnv(DirectRLEnv):
 
         return
 
-    @property
-    def find_new_goal_pose(self) -> bool:
-        """Check if a new goal pose needs to be generated."""
-        return self._find_new_goal_pose
-
-    @find_new_goal_pose.setter
-    def find_new_goal_pose(self, value: bool) -> None:
-        self._find_new_goal_pose = value
-        return
-
     def _setup_scene(self) -> None:
-        self._rig_cfg = yaml_to_cfg.load_rig_yaml(rig_yaml_path=self.cfg.rig_yaml_path)
+        self._rig_cfg = yaml_to_cfg.load_yaml(yaml_path=self.cfg.rig_yaml_path)
         self.rig_generator = RigGenerator(rig_sensor_cfgs=self._rig_cfg["sensors"])
 
         self.eef_layout_dict = {

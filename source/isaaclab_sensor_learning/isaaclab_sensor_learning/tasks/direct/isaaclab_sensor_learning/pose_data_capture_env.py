@@ -1,37 +1,20 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
+#!/usr/bin/env python3
 from __future__ import annotations
 
-import numpy as np
-from rich import inspect
 import torch
 from collections.abc import Sequence
 
 
-from isaaclab.assets import Articulation, AssetBase, RigidObject, RigidObjectCfg
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
-from isaaclab.controllers import pink_ik
 from isaaclab.envs import DirectRLEnv
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
-from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg
-import isaaclab.sim as sim_utils
-from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 import isaaclab.utils.math as math_utils
 
-from isaaclab_sensor_learning import URDF_DIR, USD_DIR
 from isaaclab_sensor_learning.controllers.limit_aware_ik import LimitAwareIK
 import isaaclab_sensor_learning.sensor.yaml_to_cfg as yaml_to_cfg
-import isaaclab_sensor_learning.sensor.rig_utils as rig_utils
 from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
-import isaaclab_sensor_learning.utils.usd_utils as usd_utils
-from isaaclab_tasks.manager_based.manipulation.pick_place.pickplace_gr1t2_env_cfg import PinkIKControllerCfg
-
-from pxr import Usd, UsdGeom, Sdf, Gf
 
 from .pose_data_capture_env_cfg import PoseDataCaptureEnvCfg
 
@@ -43,7 +26,7 @@ class PoseDataCaptureEnv(DirectRLEnv):
 
     def __init__(self, cfg: PoseDataCaptureEnvCfg, render_mode: str | None = None, **kwargs):
         # self._sensor_cfgs = yaml_to_cfg.rig_yaml_to_sensor_cfgs(rig_yaml_path=cfg.rig_yaml_path) # TODO: change to dict later
-        self._rig_cfg = yaml_to_cfg.load_rig_yaml(rig_yaml_path=cfg.rig_yaml_path)
+        self._rig_cfg = yaml_to_cfg.load_yaml(yaml_path=cfg.rig_yaml_path)
 
         super().__init__(cfg, render_mode, **kwargs)
 
@@ -77,15 +60,16 @@ class PoseDataCaptureEnv(DirectRLEnv):
         self.actions = torch.zeros(
             size=(self.num_envs, self.ik_controller.action_dim), dtype=torch.float32, device=self.device
         )  # (N, 7) target pose in world frame
+        self.rng = torch.Generator(device=self.device)
+        self.joint_limits = self.robot.data.joint_limits.torch
+
         return
 
     def _setup_scene(self):
-
-        # add sensors # TODO: Put in reset function and call that? No, that is only for epochs, i need full evolutionary runs
         self.rig_generator = RigGenerator(rig_sensor_cfgs=self._rig_cfg["sensors"])
         self.eef_layout_dict = {
             # "sensor_model": "filler_sensor_model",
-            "layout_type": "sphere",
+            "layout_type": "spherical",
             "radius": 0.2,
             "colatitude": 25,  # degrees
             "max_iter": 200,
@@ -116,16 +100,36 @@ class PoseDataCaptureEnv(DirectRLEnv):
         self.actions[:] = actions.clone().to(dtype=torch.float32)
         return
 
+    def _map(
+        self,
+        values: torch.Tensor,
+        base_lo: float | torch.Tensor,
+        base_high: float | torch.Tensor,
+        target_lo: torch.Tensor,
+        target_high: torch.Tensor,
+    ) -> torch.Tensor:
+        """Linearly map `values` from [base_lo, base_hi] to [target_lo, target_hi], elementwise."""
+        scaled = (values - base_lo) / (base_high - base_lo)
+        return target_lo + scaled * (target_high - target_lo)
+
     def _apply_action(self) -> None:
-        # self.robot.reset()
-        # joint_pos = self.robot.data.default_joint_pos.clone()
-        # joint_vel = self.robot.data.default_joint_vel.clone()
-        # self.robot.write_joint_state_to_sim_index(position=joint_pos, velocity=joint_vel)
 
         self.ik_controller.reset()
         self.ik_controller.set_command(self.actions)  # (N, 7discrete_poses.shape[0]) target pose in world frame
 
-        joint_limits = self.robot.data.soft_joint_pos_limits.torch
+        # RNG for trying different joint positions
+
+        # u = torch.rand_like(input=self.joint_limits[..., 0], generator=self.rng, device=self.device)
+        # rand_joint_pos = self._map(
+        #     values=u,
+        #     base_lo=0.0,
+        #     base_high=1.0,
+        #     target_lo=self.joint_limits[..., 0],
+        #     target_high=self.joint_limits[..., 1]
+        # )
+        # self.robot.write_joint_position_to_sim_index(position=rand_joint_pos)
+
+        ##########################################################################################################
         if self.robot.is_fixed_base:
             eef_jacobi_idx = self.robot_entity_cfg.body_ids[0] - 1
         else:
@@ -141,7 +145,13 @@ class PoseDataCaptureEnv(DirectRLEnv):
             root_pose_w[:, 0:3], root_pose_w[:, 3:7], eef_pose_w[:, 0:3], eef_pose_w[:, 3:7]
         )
         joint_pos_des = self.ik_controller.compute(eef_pos_b, eef_quat_b, jacobians, joint_pos)
-
+        # # apply actions
+        self.robot.set_joint_position_target_index(target=joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
+        self.scene.write_data_to_sim()
+        # joint_pos_des = self.limit_aware_ik_controller.solve(
+        
+        ############################################################################################################
+        # self.robot.write_joint_position_to_sim_index(position=joint_pos_des)
         # joint_pos_des = self.limit_aware_ik_controller.solve(
         #     eef_pos_b, eef_quat_b, jacobians, joint_pos, joint_limits, max_iters=10, eps=1e-3
         # )
@@ -154,9 +164,7 @@ class PoseDataCaptureEnv(DirectRLEnv):
 
         # print("joint limits:\n", joint_limits)
 
-        # apply actions
-        self.robot.set_joint_position_target_index(target=joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
-        self.scene.write_data_to_sim()
+
         # self.sim.step()
         # self.sim.forward()
         # self.sim.render()

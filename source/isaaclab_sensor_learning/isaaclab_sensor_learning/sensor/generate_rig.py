@@ -7,7 +7,7 @@ import isaaclab.utils.math as math_utils
 from isaaclab_sensor_learning import CFG_DIR
 from isaaclab_sensor_learning.sensor.yaml_to_cfg import load_sensor_yaml, rig_dict_to_sensor_cfgs
 from isaaclab_sensor_learning.sensor.spherical_sensor_layout_generator import LloydSphereSensorLayout
-from isaaclab_sensor_learning.sensor.planar_sensor_layout_generator import PlaneSensorLayout
+from isaaclab_sensor_learning.sensor.planar_sensor_layout_generator import PlanarSensorLayout
 import isaaclab_sensor_learning.sensor.camera_utils as camera_utils
 import isaaclab_sensor_learning.sensor.lidar_utils as lidar_utils
 import isaaclab_sensor_learning.sensor.rig_utils as rig_utils
@@ -49,7 +49,7 @@ class RigGenerator:
     def generate_eef_layout(self, layout_dict: dict):
         # for now, let's combine cameras and tofs. may change later
         optical_sensors = self._sensor_groups["camera"] + self._sensor_groups["tof"]
-        if layout_dict["layout_type"] == "sphere":
+        if layout_dict["type"] == "spherical":
             self.lloyd_layout_generator = LloydSphereSensorLayout(
                 sensors=optical_sensors,
                 n_sensors=len(optical_sensors),
@@ -61,14 +61,18 @@ class RigGenerator:
             )
             sensor_layout = self.lloyd_layout_generator.generate_sensor_layout()
 
-        # elif layout_dict["layout_type"] == "plane":
-        #     self.planar_layout_generator = PlaneSensorLayout(
-        #         n_sensors=len(optical_sensors),
-        #         width=layout_dict.get("width", 0.5),
-        #         height=layout_dict.get("height", 0.5),
-        #         # spacing=layout_dict.get("spacing", 0.1),
-        #     )
-        #     sensor_layout = self.planar_layout_generator.generate_sensor_layout()
+        elif layout_dict["type"] == "planar":
+            self.planar_layout_generator = PlanarSensorLayout(
+                sensors=optical_sensors,
+                n_sensors=len(optical_sensors),
+                width=layout_dict["width"],
+                height=layout_dict["height"],
+                # spacing=layout_dict.get("spacing", 0.1),
+                max_iter=layout_dict.get("max_iter", 200),
+                tol=layout_dict.get("tol", 1e-6),
+                mesh_points=layout_dict.get("mesh_points", 8000),
+            )
+            sensor_layout = self.planar_layout_generator.generate_sensor_layout()
 
         print(f"[INFO]: Generated sensor layout:")
         pp.pprint(sensor_layout)

@@ -27,6 +27,9 @@ TREES_DIR = os.path.join(PKG_DIR, "trees")
 
 DATA_DIR = os.path.join(PKG_DIR, "../../../data")
 
+SCRIPTS_DIR = os.path.join( PKG_DIR, "../../../scripts")
+
+
 
 def main():
     print(os.path.exists(DATA_DIR))

@@ -200,7 +200,7 @@ class NBVEvaluator:
         self.sensor_tensors = {}
         for sensor_name, sensor_data in trial_data["sensors"].items():
             self.sensor_tensors[sensor_name] = {
-                "pose": self._h5_to_device(sensor_data["pose"]),
+                "pose": self._h5_to_device(sensor_data["pose_w"]),
                 "rgb": self._h5_to_device(sensor_data["rgb"]),
                 "depth": self._h5_to_device(sensor_data["depth"]),
                 "normals": self._h5_to_device(sensor_data["normals"]),
