@@ -14,7 +14,7 @@ from isaaclab_sensor_learning.tasks.direct.isaaclab_sensor_learning.sensor_learn
 
 
 @configclass
-class SensorLearningEnvCfg(DirectRLEnvCfg):
+class JointStateCollectionEnvCfg(DirectRLEnvCfg):
     """Configuration for the sensor learning environment."""
 
     # env

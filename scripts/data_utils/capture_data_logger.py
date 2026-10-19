@@ -315,17 +315,17 @@ class CaptureDataLogger:
         # append sensor data to buffers
         for sensor_name, sensor_data in observations.items():
             sensor_pose_w = torch.cat([sensor_data.pos_w.torch, sensor_data.quat_w_world.torch], axis=1)  # save as pose
-            self.sensor_obs_buf[sensor_name]["pose_w"].append(sensor_pose_w)
-            self.sensor_obs_buf[sensor_name]["intrinsic_matrix"].append(sensor_data.intrinsic_matrices.torch)
-            self.sensor_obs_buf[sensor_name]["rgb"].append(sensor_data.output["rgb"].torch)
-            self.sensor_obs_buf[sensor_name]["depth"].append(sensor_data.output["depth"].torch)
+            self.sensor_obs_buf[sensor_name]["pose_w"].append(sensor_pose_w.detach())
+            self.sensor_obs_buf[sensor_name]["intrinsic_matrix"].append(sensor_data.intrinsic_matrices.torch.detach())
+            self.sensor_obs_buf[sensor_name]["rgb"].append(sensor_data.output["rgb"].torch.detach())
+            self.sensor_obs_buf[sensor_name]["depth"].append(sensor_data.output["depth"].torch.detach())
             self.sensor_obs_buf[sensor_name]["instance_segmentation"].append(
-                sensor_data.output["instance_segmentation_fast"].torch
+                sensor_data.output["instance_segmentation_fast"].torch.detach()
             )
             self.sensor_obs_buf[sensor_name]["semantic_segmentation"].append(
-                sensor_data.output["semantic_segmentation"].torch
+                sensor_data.output["semantic_segmentation"].torch.detach()
             )
-            self.sensor_obs_buf[sensor_name]["normals"].append(sensor_data.output["normals"].torch)
+            self.sensor_obs_buf[sensor_name]["normals"].append(sensor_data.output["normals"].torch.detach())
 
         for sensor_name in observations.keys():
             for data_type, target_chunk_size in self.sensor_chunk_size_dict[sensor_name].items():
@@ -352,8 +352,11 @@ class CaptureDataLogger:
     def save_actual_poses(self, poses: torch.Tensor, idx: int, last_obs: bool = False) -> None:
         self._actual_poses_buf.append(poses.cpu().numpy())
         self._actual_poses_idx_buf.append(idx)
+
+        # print("      ", self._actual_poses_buf[-1][0])
+
         if (len(self._actual_poses_buf) >= self.actual_poses_chunk_steps) or last_obs:
-            print("FLUSH: poses")
+            # print("FLUSH: poses")
             start_idx = self._actual_poses_idx_buf[0]
             end_idx = self._actual_poses_idx_buf[-1] + 1
             stacked_poses = np.stack(self._actual_poses_buf, axis=1)
@@ -370,7 +373,7 @@ class CaptureDataLogger:
         self._joint_state_buf.append(joint_state.cpu().numpy())
         self._joint_state_idx_buf.append(idx)
         if (len(self._joint_state_buf) >= self.joint_state_chunk_steps) or last_obs:
-            print("FLUSH: Joint state")
+            # print("FLUSH: Joint state")
             start_idx = self._joint_state_idx_buf[0]
             end_idx = self._joint_state_idx_buf[-1] + 1
             stacked_joint_states = np.stack(self._joint_state_buf, axis=1)

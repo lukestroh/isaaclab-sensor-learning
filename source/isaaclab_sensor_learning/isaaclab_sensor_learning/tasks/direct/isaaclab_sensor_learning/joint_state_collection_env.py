@@ -16,15 +16,16 @@ from isaaclab_sensor_learning.controllers.limit_aware_ik import LimitAwareIK
 import isaaclab_sensor_learning.sensor.yaml_to_cfg as yaml_to_cfg
 from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
 
-from .pose_data_capture_env_cfg import PoseDataCaptureEnvCfg
+from .joint_state_collection_env_cfg import JointStateCollectionEnvCfg
 
 import pprint as pp
 
 
-class PoseDataCaptureEnv(DirectRLEnv):
-    cfg: PoseDataCaptureEnvCfg
 
-    def __init__(self, cfg: PoseDataCaptureEnvCfg, render_mode: str | None = None, **kwargs):
+class JointStateCollectionEnv(DirectRLEnv):
+    cfg: JointStateCollectionEnvCfg
+
+    def __init__(self, cfg: JointStateCollectionEnvCfg, render_mode: str | None = None, **kwargs):
         # self._sensor_cfgs = yaml_to_cfg.rig_yaml_to_sensor_cfgs(rig_yaml_path=cfg.rig_yaml_path) # TODO: change to dict later
 
         super().__init__(cfg, render_mode, **kwargs)
@@ -63,6 +64,10 @@ class PoseDataCaptureEnv(DirectRLEnv):
         frame_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
         self.eef_markers = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_current"))
         self.goal_markers = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_goal"))
+        return
+
+    def _pre_physics_step(self, actions: torch.Tensor) -> None:
+        self.actions[:] = actions.clone().to(dtype=torch.float32)
         return
 
     def _apply_action(self) -> None:

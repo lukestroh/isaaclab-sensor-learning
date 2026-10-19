@@ -10,7 +10,7 @@ parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default="Template-Pose-Data-Capture-Direct-v0", help="Name of the task.")
+parser.add_argument("--task", type=str, default="Template-Joint-State-Collection-Direct-v0", help="Name of the task.")
 parser.add_argument("--seed", type=int, default=0, help="Seed argument for deterministic runs.")
 # parser.add_argument("--enable_cameras", action="store_true", default=True, help="Enable cameras in the environment.")
 
@@ -56,6 +56,16 @@ from isaaclab.utils.seed import configure_seed
 
 # from isaaclab_sensor_learning.utils import logging_conf
 
+def _map(
+    values: torch.Tensor,
+    base_lo: float | torch.Tensor,
+    base_high: float | torch.Tensor,
+    target_lo: torch.Tensor,
+    target_high: torch.Tensor,
+) -> torch.Tensor:
+    """Linearly map `values` from [base_lo, base_hi] to [target_lo, target_hi], elementwise."""
+    scaled = (values - base_lo) / (base_high - base_lo)
+    return target_lo + scaled * (target_high - target_lo)
 
 def main():
     configure_seed(seed=args_cli.seed)
@@ -72,7 +82,6 @@ def main():
     # reset environment
     env.reset()
     robot: Articulation = env.unwrapped.robot
-    sensors: dict = env.unwrapped.sensors
     scene: InteractiveScene = env.unwrapped.scene
     sim: sim_utils.SimulationContext = env.unwrapped.sim
     cuda_device = env.unwrapped.device
@@ -127,6 +136,8 @@ def main():
                 dlog.save_joint_states(joint_states=joint_states_list)
                 break
 
+            print(f"[INFO]: {pose_idx+1}/{len(discrete_poses)}", end="\r")
+
             goal_pose = torch.tensor(
                 discrete_poses[pose_idx][np.newaxis, :], dtype=torch.float32, device=env.unwrapped.device
             )
@@ -148,33 +159,33 @@ def main():
             # orientation
             quat_diff_err = math_utils.quat_error_magnitude(actions[:, 3:7], robot_eef_w[:, 3:7])
             orientations_close = torch.isclose(quat_diff_err, torch.tensor(0.0), atol=0.006)
-
-            # joint states
-            robot_joint_pos = robot.data.joint_pos.torch
-
-
-            if step_count > max_steps:
-                max_steps = step_count
             
             # save observations and poses if the robot's end-effector is close to the goal pose
             if positions_close.all() and orientations_close.all():
-                joint_states_list.append(robot_joint_pos[0].detach().cpu())
+                # joint states
+                robot_joint_pos = robot.data.joint_pos.torch
+                joint_states_list.append(robot_joint_pos[0].detach().cpu()) # append the first env's joint states since all envs are the same
                 joint_pos = robot.data.default_joint_pos.clone()
                 joint_vel = robot.data.default_joint_vel.clone()
                 robot.write_joint_state_to_sim_index(position=joint_pos, velocity=joint_vel)
                 robot.reset()
-                total_steps += step_count
-                avg_step_count = total_steps / (pose_idx + 1)
                 step_count = 0
                 pose_idx += 1
                 continue
+
             if step_count >= step_count_limit:
+                print(f"\n[INFO]: Step count limit reached for pose {pose_idx+1}/{len(discrete_poses)}. Resetting robot to a new random joint state.")
                 joint_limits = robot.data.joint_limits.torch
                 # try from a different start pose, randomize the robot's joint positions
                 rand_joint_pos_normalized = torch.rand_like(robot.data.default_joint_pos)
-                rand_joint_pos = (
-                    rand_joint_pos_normalized * (joint_limits[:, 1] - joint_limits[:, 0]) + joint_limits[:, 0]
+                rand_joint_pos = _map(
+                    rand_joint_pos_normalized,
+                    base_lo=0.0,
+                    base_high=1.0,
+                    target_lo=joint_limits[..., 0],
+                    target_high=joint_limits[..., 1],
                 )
+                
                 joint_pos = rand_joint_pos.clone()
                 joint_vel = robot.data.default_joint_vel.clone()
                 robot.write_joint_state_to_sim_index(position=joint_pos, velocity=joint_vel)
@@ -182,7 +193,7 @@ def main():
                 step_count = 0
                 continue
 
-
+    print("\n[INFO]: Closing environment and simulation app.")
     return
 
 

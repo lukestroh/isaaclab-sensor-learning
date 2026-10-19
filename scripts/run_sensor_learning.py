@@ -82,6 +82,7 @@ def main():
     # reset environment
     env.reset()
     robot: Articulation = env.unwrapped.robot
+    robot_entity_cfg = env.unwrapped.robot_entity_cfg
     sensors: dict = env.unwrapped.sensors
     scene: InteractiveScene = env.unwrapped.scene
     sim: sim_utils.SimulationContext = env.unwrapped.sim
@@ -91,6 +92,8 @@ def main():
     decimation = env.unwrapped.cfg.decimation
 
     discrete_poses, trial_metadata = trial_setup.default_discrete_poses(seed=args_cli.seed, n_envs=n_envs, robot=robot)
+    with h5py.File(os.path.join(DATA_DIR, "joint_states/joint_states.h5"), "r") as f:
+        joint_states_data: np.ndarray = f["joint_states"][:]
     tree_metadata = trial_setup.get_tree_metadata(env=env)
     sensor_metadata = trial_setup.get_sensor_metadata(sensors=sensors)
 
@@ -102,104 +105,54 @@ def main():
 
     # simulate environment
     pose_idx = 0
-    step_count = 0
-    step_count_limit = 500
-    max_steps = 0
-    avg_step_count = 0
-    total_steps = 0
-    skipped_poses = []
-    last_obs = False
+    # step_count = 0
+    # step_count_limit = 500
+    # max_steps = 0
+    # avg_step_count = 0
+    # total_steps = 0
+    # skipped_poses = []
+    # last_obs = False
+    joint_pos = robot.data.default_joint_pos.clone()
+    joint_vel = robot.data.default_joint_vel.clone()
+    robot.write_joint_state_to_sim_index(position=joint_pos, velocity=joint_vel)
 
-    # Data collection loop
-    while simulation_app.is_running():
-        # check if poses completed. save any skipped poses
-        if last_obs or pose_idx >= len(discrete_poses):
-            print("\n[INFO]: All poses completed, exiting simulation.")
-            cdlog.save_skipped_poses(skipped_poses=skipped_poses)
-            cdlog.save_labels_dict()
-            break
-        print(f"\rpose iter: {pose_idx+1}/{len(discrete_poses)}", end="")
-        # run everything in inference mode
-        with torch.inference_mode():
-            goal_pose = torch.tensor(
-                discrete_poses[pose_idx][np.newaxis, :], dtype=torch.float32, device=cuda_device
-            )
+    time.sleep(5.0)  # wait for the simulation to stabilize
 
-            # Actions
-            actions = torch.tensor(goal_pose.detach().clone(), dtype=torch.float32, device=cuda_device).repeat(
-                n_envs, 1
-            )
-            # step
-            observations, rewards, terminated, truncated, info = env.step(actions)
-            step_count += 1
+    for joint_state in joint_states_data:
+        print(f"\rpose iter: {pose_idx+1}/{len(joint_states_data)}", end="")
+        joint_state_t = torch.tensor(joint_state, dtype=torch.float32, device=cuda_device).repeat(n_envs, 1)
+        joint_vel_t = torch.zeros_like(joint_state_t, device=cuda_device)
+        robot.write_joint_state_to_sim_index(position=joint_state_t, velocity=joint_vel_t)
+        robot.set_joint_position_target_index(target=joint_state_t, joint_ids=robot_entity_cfg.joint_ids)
+        sim.step()
+        observations, rewards, terminated, truncated, info = env.step(action=joint_state_t)
 
-            # check if the robot's end-effector is close to the goal pose
-            robot_base_w = robot.data.root_pose_w.torch
-            robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
-            # position
-            robot_eef_pos_b = torch.subtract(robot_eef_w[:, 0:3], robot_base_w[:, 0:3])
-            positions_close = torch.isclose(robot_eef_pos_b[:, 0:3], goal_pose[:, 0:3], atol=0.002)
-            # orientation
-            quat_diff_err = math_utils.quat_error_magnitude(actions[:, 3:7], robot_eef_w[:, 3:7])
-            orientations_close = torch.isclose(quat_diff_err, torch.tensor(0.0), atol=0.006)
-            # joint states
-            robot_joint_pos = robot.data.joint_pos.torch
+        robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
+        
+        if pose_idx == len(joint_states_data) - 1:
+            cdlog.save_pose_observations(observations=observations, idx=pose_idx, last_obs=True)
+            cdlog.save_actual_poses(poses=robot_eef_w.detach(), idx=pose_idx, last_obs=True)
+        else:
+            cdlog.save_pose_observations(observations=observations, idx=pose_idx, last_obs=False)
+            cdlog.save_actual_poses(poses=robot_eef_w.detach(), idx=pose_idx, last_obs=False)
+        pose_idx += 1
+        time.sleep(0.01)
 
-            # print("\n", goal_pose[:, 0:3] - robot_eef_pos_b, quat_diff_err)
 
-            if step_count > max_steps:
-                max_steps = step_count
-            
-            # save observations and poses if the robot's end-effector is close to the goal pose
-            if positions_close.all() and orientations_close.all():
-                if pose_idx >= len(discrete_poses):
-                    cdlog.save_pose_observations(observations=observations, idx=pose_idx, last_obs=True)
-                    cdlog.save_actual_poses(poses=robot_eef_w, idx=pose_idx, last_obs=True)
-                    cdlog.save_joint_state(joint_state=robot_joint_pos, idx=pose_idx, last_obs=True)
-                    last_obs = True
-                    continue
-                else:
-                    cdlog.save_pose_observations(observations=observations, idx=pose_idx)
-                    cdlog.save_actual_poses(poses=robot_eef_w, idx=pose_idx)
-                    cdlog.save_joint_state(joint_state=robot_joint_pos, idx=pose_idx)
-                # break  # remove after testing
+    robot.sim_state = "evaluate" # change robot operation mode
+    print(f"\n[INFO]: Pose data capture complete. Proceeding to NBV evaluation loop.")
 
-                print(f"  --  avg steps: {avg_step_count:.2f} -- max steps: {max_steps}", end="")
-                joint_pos = robot.data.default_joint_pos.clone()
-                joint_vel = robot.data.default_joint_vel.clone()
-                robot.write_joint_state_to_sim_index(position=joint_pos, velocity=joint_vel)
-                robot.reset()
-                total_steps += step_count
-                avg_step_count = total_steps / (pose_idx + 1)
-                step_count = 0
-                pose_idx += 1
-            else:
-                if step_count > step_count_limit:
-                    print(
-                        f"\n[WARNING]: Step count exceeded {step_count_limit} for pose {pose_idx}, continuing to next pose."
-                    )
-                    cdlog.save_pose_observations(
-                        observations=observations, idx=pose_idx
-                    )  # save observations even if not reached goal. change later?
-                    cdlog.save_actual_poses(poses=robot_eef_w, idx=pose_idx)
-                    cdlog.save_joint_state(joint_state=robot_joint_pos, idx=pose_idx)
-                    skipped_poses.append(pose_idx)
-                    total_steps += step_count
-                    step_count = 0
-                    pose_idx += 1
-                    continue
-    # end of data collection loop
-    print(f"\n[INFO]: Pose evaluation completed. Total poses: {len(discrete_poses)}, Skipped poses: {len(skipped_poses)}")
-    print(f"[INFO]: Proceeding to NBV evaluation loop.")
+    import sys; sys.exit(0)
 
 
     # reset environment
     env.reset()
 
     # trial data path
-    trial_data_path = os.path.join(DATA_DIR, "capture", f"SL_PDC_{trial_metadata['datetime_id']}.h5")
+    trial_data_path = os.path.join(DATA_DIR, "capture", f"SL-PDC_{trial_metadata['datetime_id']}.h5")
+    # print(os.path.exists(trial_data_path))
     if not os.path.exists(trial_data_path):
-        raise FileNotFoundError
+        raise FileNotFoundError (f"Trial data file not found: {trial_data_path}")
     with h5py.File(trial_data_path, "r") as f:
         trial_data_dict = h5py_utils.h5_to_dict(f)
 
@@ -262,6 +215,8 @@ def main():
 
     def get_envs_to_move_intersection(a, b):
         return a[torch.isin(a, b)]
+
+    
 
     # NBV loop
     while simulation_app.is_running():

@@ -35,14 +35,14 @@ class EvaluationDataLogger:
         datetime_id = self.capture_data_dict["datetime_id"]
 
         data_dir = os.path.join(pkg_dir, "data", self.process_type)
-        trial_name = f"SL-PDEVAL_{datetime_id}"
-        file_path = os.path.join(data_dir, f"{trial_name}.h5")
+        eval_trial_name = f"SL-PDEVAL_{datetime_id}"
+        file_path = os.path.join(data_dir, f"{eval_trial_name}.h5")
         if not os.path.exists(data_dir):
             print(f"[INFO] Creating data directory at {data_dir}")
             os.makedirs(data_dir)
         if os.path.exists(file_path):
             print(f"[WARNING] File {file_path} already exists. It will be overwritten.")
-        return file_path, trial_name
+        return file_path, eval_trial_name
 
     # def _save_data(self, data: np.ndarray, key: str) -> None:
     #     return
@@ -53,7 +53,7 @@ class EvaluationDataLogger:
     def save_evaluation_metadata(self, evaluation_metadata: dict[str, Any]) -> None:
         with h5.File(self.datafile_path, "w") as file:
             file.attrs["seed"] = evaluation_metadata["seed"]
-            file.attrs["trial_name"] = evaluation_metadata["trial_name"]
+            file.attrs["datetime_id"] = evaluation_metadata["datetime_id"]
             file.attrs["associated_data"] = evaluation_metadata["associated_data"]
         return
 

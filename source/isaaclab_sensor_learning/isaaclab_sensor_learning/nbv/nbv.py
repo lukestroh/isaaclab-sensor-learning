@@ -195,7 +195,7 @@ class NBVEvaluator:
             unique_instances=self.prim_path_to_custom_id, n_envs=self.n_envs, device=self.device
         )
         self.skipped_poses = torch.from_numpy(
-            np.ascontiguousarray(trial_data["poses"]["actual_poses"]["skipped_poses"])
+            np.ascontiguousarray(trial_data["poses"]["actual_poses"].get("skipped_poses", []))
         ).to(device=self.device)
         self.sensor_tensors = {}
         for sensor_name, sensor_data in trial_data["sensors"].items():

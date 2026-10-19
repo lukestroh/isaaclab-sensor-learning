@@ -100,31 +100,10 @@ class SensorLearningEnv(DirectRLEnv):
         return
 
     def _apply_action(self) -> None:
+        eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
+        # print("     ", eef_pose_w[0])
         if self.sim_state == "capture":
-            # for _ in range(150):
-            self.ik_controller.reset()
-            self.ik_controller.set_command(self.actions)
-
-            if self.robot.is_fixed_base:
-                eef_jacobi_idx = self.robot_entity_cfg.body_ids[0] - 1
-            else:
-                eef_jacobi_idx = self.robot_entity_cfg.body_ids[0]
-            jacobi_joint_ids = [j + self.robot.num_base_dofs for j in self.robot_entity_cfg.joint_ids]
-            jacobians = self.robot.data.body_link_jacobian_w.torch[:, eef_jacobi_idx, :, jacobi_joint_ids]
-            eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
-            root_pose_w = self.robot.data.root_pose_w.torch
-            joint_pos = self.robot.data.joint_pos.torch[:, self.robot_entity_cfg.joint_ids]
-
-            # Primay task: compute joint position target from desired end-effector pose
-            eef_pos_b, eef_quat_b = math_utils.subtract_frame_transforms(
-                root_pose_w[:, 0:3], root_pose_w[:, 3:7], eef_pose_w[:, 0:3], eef_pose_w[:, 3:7]
-            )
-            joint_pos_des = self.ik_controller.compute(eef_pos_b, eef_quat_b, jacobians, joint_pos)
-            # # apply actions
-            self.robot.set_joint_position_target_index(target=joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
-            self.robot.write_joint_state_to_sim(joint_pos_des, torch.zeros_like(joint_pos_des))
-            self.scene.write_data_to_sim()
-            # self.sim.forward()
+            ...
 
         elif self.sim_state == "evaluate":
             self.ik_controller.reset()
@@ -136,7 +115,7 @@ class SensorLearningEnv(DirectRLEnv):
                 eef_jacobi_idx = self.robot_entity_cfg.body_ids[0]
             jacobi_joint_ids = [j + self.robot.num_base_dofs for j in self.robot_entity_cfg.joint_ids]
             jacobians = self.robot.data.body_link_jacobian_w.torch[:, eef_jacobi_idx, :, jacobi_joint_ids]
-            eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
+            # eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
             root_pose_w = self.robot.data.root_pose_w.torch
             joint_pos = self.robot.data.joint_pos.torch[:, self.robot_entity_cfg.joint_ids]
 
@@ -151,7 +130,7 @@ class SensorLearningEnv(DirectRLEnv):
 
         # Update sensor poses since IsaacSim does not automatically update sensor poses when the parent link moves. This is a known issue with IsaacSim.
         # TODO: check if this has been updated.
-        for sensor in self.sensors.values():
+        for sensor_name, sensor in self.sensors.items():
             sensor_cfg = sensor.cfg
             parent_offset = sensor_cfg.offset
             new_sensor_pos_w, new_sensor_quat_w = math_utils.combine_frame_transforms(
@@ -161,6 +140,11 @@ class SensorLearningEnv(DirectRLEnv):
                 q12=torch.tensor(parent_offset.rot, device=self.device).unsqueeze(0).repeat(self.cfg.num_envs, 1),
             )
             sensor.set_world_poses(positions=new_sensor_pos_w, orientations=new_sensor_quat_w)
+            self.sim.step()
+            if sensor_name == "tof0":
+                print(sensor_name)
+                # print(f"\n{parent_offset.pos}")
+                print(f"\n{sensor.data.quat_w_world.torch}")
 
         # update marker poses
         eef_pose_w = self.robot.data.body_state_w.torch[:, self.robot_entity_cfg.body_ids[0], 0:7]
