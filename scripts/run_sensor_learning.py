@@ -28,6 +28,7 @@ parser.add_argument(
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
+args_cli.enable_cameras = True
 
 # launch omniverse app
 app_launcher = AppLauncher(args_cli)
@@ -103,6 +104,13 @@ def main():
     cdlog.save_tree_metadata(tree_metadata=tree_metadata)
     cdlog.save_sensor_metadata(sensor_metadata=sensor_metadata, n_poses=discrete_poses.shape[0])
 
+    # # Print list of all prims in the scene for debugging
+    # from isaaclab.sim.utils.stage import get_current_stage
+    # stage = get_current_stage()
+
+    # print(sum(1 for _ in stage.Traverse()), sum(1 for p in stage.Traverse() if p.IsA(UsdGeom.Xformable)), sum(1 for p in stage.Traverse() if p.IsA(UsdGeom.Camera)))
+    # import sys; sys.exit(0)
+
     # simulate environment
     pose_idx = 0
     # step_count = 0
@@ -115,6 +123,8 @@ def main():
     joint_pos = robot.data.default_joint_pos.clone()
     joint_vel = robot.data.default_joint_vel.clone()
     robot.write_joint_state_to_sim_index(position=joint_pos, velocity=joint_vel)
+    robot.actuators.target_command.set_position_index(value=joint_pos, joint_ids=robot_entity_cfg.joint_ids)
+    sim.step()
 
     time.sleep(5.0)  # wait for the simulation to stabilize
 
@@ -123,11 +133,21 @@ def main():
         joint_state_t = torch.tensor(joint_state, dtype=torch.float32, device=cuda_device).repeat(n_envs, 1)
         joint_vel_t = torch.zeros_like(joint_state_t, device=cuda_device)
         robot.write_joint_state_to_sim_index(position=joint_state_t, velocity=joint_vel_t)
-        robot.set_joint_position_target_index(target=joint_state_t, joint_ids=robot_entity_cfg.joint_ids)
+        robot.actuators.target_command.set_position_index(value=joint_state_t, joint_ids=robot_entity_cfg.joint_ids)
         sim.step()
+
+        robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__wrist_3_link")[0]].reshape(-1, 7)
+
+        for sensor_name, sensor in sensors.items():
+            print("\n", robot_eef_w[0])
+            print("\n", sensor_name)
+            print(torch.cat([sensor.data.pos_w.torch[0], sensor.data.quat_w_world.torch[0]]))
+            ...
+
         observations, rewards, terminated, truncated, info = env.step(action=joint_state_t)
 
-        robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
+        
+
         
         if pose_idx == len(joint_states_data) - 1:
             cdlog.save_pose_observations(observations=observations, idx=pose_idx, last_obs=True)

@@ -303,7 +303,7 @@ class CaptureDataLogger:
         # add semantic and instance labels to labels_dict
         for sensor_name, sensor_data in observations.items():
             semantic_labels_dict = sensor_data.info["semantic_segmentation"]
-            instance_labels_dict = sensor_data.info["instance_segmentation_fast"]
+            instance_labels_dict = sensor_data.info["instance_segmentation"]
             for rgba_id, label in instance_labels_dict["idToLabels"].items():
                 if label not in ["BACKGROUND", "UNLABELLED"]:  # Does isaac sim have a typo??
                     env_id = label.split("/")[3].split("_")[1]
@@ -320,7 +320,7 @@ class CaptureDataLogger:
             self.sensor_obs_buf[sensor_name]["rgb"].append(sensor_data.output["rgb"].torch.detach())
             self.sensor_obs_buf[sensor_name]["depth"].append(sensor_data.output["depth"].torch.detach())
             self.sensor_obs_buf[sensor_name]["instance_segmentation"].append(
-                sensor_data.output["instance_segmentation_fast"].torch.detach()
+                sensor_data.output["instance_segmentation"].torch.detach()
             )
             self.sensor_obs_buf[sensor_name]["semantic_segmentation"].append(
                 sensor_data.output["semantic_segmentation"].torch.detach()

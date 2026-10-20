@@ -19,3 +19,18 @@ Run sandbox container
 ```
 apptainer shell --nv isaaclab-sandbox
 ```
+
+copy sandbox to tmp
+```
+cp -av ./isaaclab-sandbox /tmp/strohbel/isaaclab-sandbox
+```
+
+make edits, run, download files
+
+copy back to hpc-share
+
+```
+Cp -av /tmp/username/sandbox ~/hpc-share/sandbox-version2
+```
+
+use sbatch script for multiple candidate runs

@@ -38,7 +38,8 @@ class SensorLearningEnv(DirectRLEnv):
         super().__init__(cfg, render_mode, **kwargs)
 
         # Robot setup
-        self.robot_entity_cfg = SceneEntityCfg(name="robot", joint_names=[".*"], body_names=["ur10e__tool0"])
+        # self.robot_entity_cfg = SceneEntityCfg(name="robot", joint_names=[".*"], body_names=["ur10e__tool0"])
+        self.robot_entity_cfg = SceneEntityCfg(name="robot", joint_names=[".*"], body_names=["ur10e__wrist_3_link"])
         self.robot_entity_cfg.resolve(self.scene)
         joint_pos = self.robot.data.default_joint_pos.clone()
         joint_vel = self.robot.data.default_joint_vel.clone()
@@ -91,7 +92,7 @@ class SensorLearningEnv(DirectRLEnv):
         self.eef_markers = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_current"))
         self.goal_markers = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_goal"))
 
-        self.scene.clone_environments(copy_from_source=True)
+        # self.scene.clone_environments(copy_from_source=True)
         self.scene.filter_collisions()
         return
 
@@ -130,21 +131,22 @@ class SensorLearningEnv(DirectRLEnv):
 
         # Update sensor poses since IsaacSim does not automatically update sensor poses when the parent link moves. This is a known issue with IsaacSim.
         # TODO: check if this has been updated.
-        for sensor_name, sensor in self.sensors.items():
-            sensor_cfg = sensor.cfg
-            parent_offset = sensor_cfg.offset
-            new_sensor_pos_w, new_sensor_quat_w = math_utils.combine_frame_transforms(
-                t01=eef_pose_w[:, 0:3],
-                q01=eef_pose_w[:, 3:7],
-                t12=torch.tensor(parent_offset.pos, device=self.device).unsqueeze(0).repeat(self.cfg.num_envs, 1),
-                q12=torch.tensor(parent_offset.rot, device=self.device).unsqueeze(0).repeat(self.cfg.num_envs, 1),
-            )
-            sensor.set_world_poses(positions=new_sensor_pos_w, orientations=new_sensor_quat_w)
-            self.sim.step()
-            if sensor_name == "tof0":
-                print(sensor_name)
-                # print(f"\n{parent_offset.pos}")
-                print(f"\n{sensor.data.quat_w_world.torch}")
+
+        #     sensor_cfg = sensor.cfg
+        #     parent_offset = sensor_cfg.offset
+        #     new_sensor_pos_w, new_sensor_quat_w = math_utils.combine_frame_transforms(
+        #         t01=eef_pose_w[:, 0:3],
+        #         q01=eef_pose_w[:, 3:7],
+        #         t12=torch.tensor(parent_offset.pos, device=self.device).unsqueeze(0).repeat(self.cfg.num_envs, 1),
+        #         q12=torch.tensor(parent_offset.rot, device=self.device).unsqueeze(0).repeat(self.cfg.num_envs, 1),
+        #     )
+        #     sensor.set_world_poses(positions=new_sensor_pos_w, orientations=new_sensor_quat_w)
+        #     self.sim.step()
+        #     if sensor_name == "tof0":
+        #         print(sensor_name)
+        #         print(new_sensor_quat_w)
+        #         # print(f"\n{parent_offset.pos}")
+        #         print(f"\n{sensor.data.quat_w_world.torch}")
 
         # update marker poses
         eef_pose_w = self.robot.data.body_state_w.torch[:, self.robot_entity_cfg.body_ids[0], 0:7]

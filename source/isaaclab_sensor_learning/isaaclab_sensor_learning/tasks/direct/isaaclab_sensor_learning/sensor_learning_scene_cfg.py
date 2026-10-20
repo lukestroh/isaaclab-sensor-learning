@@ -2,7 +2,7 @@
 from isaaclab.assets import AssetBaseCfg, ArticulationCfg, RigidObjectCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import MultiUsdFileCfg, RigidBodyBaseCfg
-from isaaclab.terrains import TerrainImporterCfg
+from isaaclab.terrains import TerrainImporterCfg, TerrainGeneratorCfg
 from isaaclab.utils import configclass
 
 from isaaclab_assets.robots.universal_robots import UR10e_CFG

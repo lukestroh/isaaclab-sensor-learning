@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from isaaclab.renderers import RendererCfg
+from isaaclab_physx.renderers import IsaacRtxRendererCfg, IsaacRtxRendererGlobalSettingsCfg
 from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg
 from isaaclab.sim.spawners.sensors import PinholeCameraCfg
 import isaaclab.utils.math as math_utils
@@ -119,9 +120,9 @@ class RigGenerator:
                 offset_cfg.rot = tuple(full_offset_quat.tolist())
                 # offset_cfg.convention = "ros"
 
-                # prim_path = f"/World/envs/env_.*/robot/Geometry/amiga__base/amiga__body/amiga__tool0/linear_slider__base/linear_slider__base_link/linear_slider__moving_base/linear_slider__flange/linear_slider__tool0/ur10e__base_link/ur10e__base_link_inertia/ur10e__shoulder_link/ur10e__upper_arm_link/ur10e__forearm_link/ur10e__wrist_1_link/ur10e__wrist_2_link/ur10e__wrist_3_link/ur10e__flange/ur10e__tool0/{sensor_name}"
+                prim_path = f"/World/envs/env_.*/robot/Geometry/amiga__base/amiga__body/amiga__tool0/linear_slider__base/linear_slider__base_link/linear_slider__moving_base/linear_slider__flange/linear_slider__tool0/ur10e__base_link/ur10e__base_link_inertia/ur10e__shoulder_link/ur10e__upper_arm_link/ur10e__forearm_link/ur10e__wrist_1_link/ur10e__wrist_2_link/ur10e__wrist_3_link/ur10e__flange/ur10e__tool0/{sensor_name}"
                 # prim_path = f"/World/envs/env_.*/robot/ur10e__tool0/{sensor_name}"
-                prim_path = f"/World/envs/env_.*/{sensor_name}"
+                # prim_path = f"/World/envs/env_.*/{sensor_name}"
 
                 # Create sensor config
                 sensor_cfgs[sensor_name] = {
@@ -130,7 +131,7 @@ class RigGenerator:
                         prim_path=prim_path,
                         width=depth_sensor_metadata["width"],
                         height=depth_sensor_metadata["height"],
-                        data_types=["rgb", "depth", "normals", "semantic_segmentation", "instance_segmentation_fast"],
+                        data_types=["rgb", "depth", "normals", "semantic_segmentation", "instance_segmentation"],
                         spawn=PinholeCameraCfg.from_intrinsic_matrix(
                             intrinsic_matrix=camera_utils.get_intrinsic_matrix_from_dfov(
                                 dfov=depth_sensor_metadata["dfov"],
@@ -151,6 +152,12 @@ class RigGenerator:
                         debug_vis=True,
                         colorize_instance_segmentation=False,
                         colorize_semantic_segmentation=False,
+                        renderer_cfg=IsaacRtxRendererCfg(
+                            global_settings=IsaacRtxRendererGlobalSettingsCfg(
+                                enable_global_illumination=True,
+                                antialiasing_mode="Off",
+                            )
+                        ),
                     ),
                 }
 
