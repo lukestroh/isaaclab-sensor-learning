@@ -71,7 +71,7 @@ def get_tree_metadata(env) -> dict:
     tree_metadata = {}
     tree_prims = [prim for prim in stage_utils.get_current_stage().Traverse() if prim.GetName() == "tree"]
     exclude_re = re.compile(r"/(?:Looks|skeleton)(?:/|$)")
-    instance_path_to_id_map = {f"env_{i}": {} for i in range(env.unwrapped.cfg.num_envs)}
+    instance_path_to_id_map = {f"env_{i}": {} for i in range(env.unwrapped.num_envs)}
 
     # get all tree part prims for indexing bin counts
     for tree_prim in tree_prims:

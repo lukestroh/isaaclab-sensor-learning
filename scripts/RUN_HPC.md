@@ -30,7 +30,7 @@ make edits, run, download files
 copy back to hpc-share
 
 ```
-Cp -av /tmp/username/sandbox ~/hpc-share/sandbox-version2
+cp -av /tmp/username/sandbox ~/hpc-share/sandbox-version2
 ```
 
-use sbatch script for multiple candidate runs
+use sbatch script for multiple candidate runs? Can this be coordinated with pymoo?

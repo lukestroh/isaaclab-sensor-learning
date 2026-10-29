@@ -74,7 +74,7 @@ def main():
     if not os.path.exists(trial_data_path):
         raise FileNotFoundError
     with h5py.File(trial_data_path, "r") as f:
-        trial_data_dict = h5py_utils.h5_to_dict(f)
+        trial_data_dict = h5py_utils.h5_to_dict(f, attrs_only=("sensors",))
 
     # set seed
     seed = trial_data_dict["attrs"]["seed"]
@@ -142,7 +142,7 @@ def main():
     gain_cfg = GainConfig()
     nbv_evaluator = NBVEvaluator(
         n_envs=num_envs,
-        trial_data=trial_data_dict,
+        trial_data_path=trial_data_path,
         observation_config=observation_cfg,
         gain_config=gain_cfg,
     )
@@ -154,7 +154,7 @@ def main():
     # compute the next best pose to move to based on the current end-effector pose and the trial data
     closest_idxs = nbv_evaluator.get_closest_pose_idxs(curr_poses=robot_eef_w)
     best_poses = nbv_evaluator.compute_env_info_gain_from_pose_idxs(
-        env_ids=torch.arange(num_envs), closest_idxs=closest_idxs, trial_data_dict=trial_data_dict
+        env_ids=torch.arange(num_envs), closest_idxs=closest_idxs
     )
     current_poses = best_poses.clone().detach()
     env_idxs = best_poses[:, 0]
@@ -237,7 +237,7 @@ def main():
                 if unseen_closest_idxs.numel() == 0:
                     raise ValueError("no unseen_closes_idxs")
                 best_pose_idxs = nbv_evaluator.compute_env_info_gain_from_pose_idxs(
-                    env_ids=envs_change_goal, closest_idxs=unseen_closest_idxs, trial_data_dict=trial_data_dict
+                    env_ids=envs_change_goal, closest_idxs=unseen_closest_idxs
                 )
                 if best_pose_idxs.numel() == 0:
                     print(unseen_closest_idxs)

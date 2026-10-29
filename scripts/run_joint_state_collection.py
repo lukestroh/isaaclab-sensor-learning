@@ -152,7 +152,7 @@ def main():
 
             # check if the robot's end-effector is close to the goal pose
             robot_base_w = robot.data.root_pose_w.torch
-            robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__tool0")[0]].reshape(-1, 7)
+            robot_eef_w = robot.data.body_pose_w.torch[:, robot.find_bodies("ur10e__wrist_3_link")[0]].reshape(-1, 7)
             # position
             robot_eef_pos_b = torch.subtract(robot_eef_w[:, 0:3], robot_base_w[:, 0:3])
             positions_close = torch.isclose(robot_eef_pos_b[:, 0:3], goal_pose[:, 0:3], atol=0.002)

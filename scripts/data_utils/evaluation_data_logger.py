@@ -8,11 +8,15 @@ from typing import Any
 
 
 class EvaluationDataLogger:
-    def __init__(self, capture_data_dict, compression_level: int = 9):
+    def __init__(self, capture_data_dict, compression_level: int = 9, file_path: str | None = None):
+        """
+        :param file_path: explicit output file (e.g. ``<out_dir>/nbv.h5`` for NSGA evaluations); defaults to
+            ``data/evaluation/SL-PDEVAL_<datetime_id>.h5``.
+        """
         self.process_type = "evaluation"
         self.capture_data_dict = capture_data_dict
         self.n_envs = capture_data_dict["n_envs"]
-        self.datafile_path, self.trial_name = self.get_file_path()
+        self.datafile_path, self.trial_name = self.get_file_path(file_path)
         # buffers
         self._timestamp_buf = []
         self._joint_position_buf = []
@@ -26,10 +30,13 @@ class EvaluationDataLogger:
         chunk_steps = int(max(1, target_chunk_bytes // row_bytes))
         return chunk_steps
 
-    def get_file_path(self) -> tuple[str, str]:
+    def get_file_path(self, file_path: str | None = None) -> tuple[str, str]:
         """
         Get the file path for the data file.
         """
+        if file_path is not None:
+            os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+            return file_path, os.path.splitext(os.path.basename(file_path))[0]
         pkg_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
         datetime_id = self.capture_data_dict["datetime_id"]
@@ -254,4 +261,110 @@ class EvaluationDataLogger:
                     compression="gzip",
                     compression_opts=self.compression_level,
                 )
+        return
+
+    def save_instance_coverage(self, instance_coverage: dict[str, dict[str, dict]]) -> None:
+        """
+        Save NBVEvaluator.instance_coverage() output as ``instance_coverage/<env>/<class>`` groups.
+
+        Each class group holds attrs ``n_instances`` and ``seen_ge_<k>`` (fraction of instances with >= k hits).
+        """
+        with h5.File(self.datafile_path, "a") as file:
+            root = file.require_group("instance_coverage")
+            for env_key, by_class in instance_coverage.items():
+                env_group = root.require_group(env_key)
+                for cls, stats in by_class.items():
+                    group = env_group.require_group(cls)
+                    group.attrs["n_instances"] = stats["n_instances"]
+                    for k, fraction in stats["seen"].items():
+                        group.attrs[f"seen_ge_{k}"] = fraction
+        return
+
+    def save_instance_extent(
+        self,
+        instance_extent: dict[str, dict[str, dict]],
+        per_instance: dict[str, dict[int, dict[str, torch.Tensor]]],
+        instance_class_ids: dict[str, torch.Tensor],
+        class_names: tuple[str, ...],
+        config: dict[str, Any],
+    ) -> None:
+        """
+        Save NBVEvaluator extent metrics under ``instance_extent/``:
+
+        - ``<env>/<class>/ge_<k>`` attrs: ``length_coverage``, ``theta_coverage``, ``continuous`` (class means).
+        - ``<env>/per_instance/ge_<k>/{length_coverage, theta_coverage, longest_gap, continuous}`` datasets, indexed by
+          custom instance id, plus ``<env>/per_instance/class_id`` (index into the root attr ``class_names``, -1 unknown).
+        - root attrs: ``class_names`` and the continuity config (L, g, thresholds).
+        """
+        with h5.File(self.datafile_path, "a") as file:
+            root = file.require_group("instance_extent")
+            root.attrs["class_names"] = list(class_names)
+            for key, value in config.items():
+                if isinstance(value, dict):  # per-class thresholds
+                    for cls, cls_value in value.items():
+                        root.attrs[f"{key}/{cls}"] = cls_value
+                else:
+                    root.attrs[key] = value
+            for env_key, by_class in instance_extent.items():
+                env_group = root.require_group(env_key)
+                for cls, by_k in by_class.items():
+                    for k, stats in by_k.items():
+                        group = env_group.require_group(f"{cls}/ge_{k}")
+                        for name, value in stats.items():
+                            group.attrs[name] = value
+                inst_group = env_group.require_group("per_instance")
+                inst_group.create_dataset("class_id", data=instance_class_ids[env_key].cpu().numpy())
+                for k, arrays in per_instance[env_key].items():
+                    k_group = inst_group.require_group(f"ge_{k}")
+                    for name, values in arrays.items():
+                        k_group.create_dataset(name, data=values.cpu().numpy(), compression="gzip")
+        return
+
+    def save_termination(self, rows: list[dict[str, Any]], config: dict[str, Any]) -> None:
+        """
+        Save TerminationTracker.summary() as a ``termination`` table: one dataset per column, one row per env.
+
+        ``reason`` holds TerminationReason codes; root attrs map each code to its name (``reason_<code>``) and record
+        the TerminationConfig values. ``t_end`` / ``step_end`` are NBV-relative (0 at the start of the NBV loop).
+        """
+        from isaaclab_sensor_learning.nbv.termination import TerminationReason
+
+        with h5.File(self.datafile_path, "a") as file:
+            group = file.require_group("termination")
+            for reason in TerminationReason:
+                group.attrs[f"reason_{int(reason)}"] = reason.name
+            for key, value in config.items():
+                group.attrs[f"config/{key}"] = "none" if value is None else value  # h5py can't store None
+            for column in rows[0].keys():
+                values = [row[column] for row in rows]
+                data = np.array(values, dtype=h5.string_dtype()) if isinstance(values[0], str) else np.array(values)
+                group.create_dataset(column, data=data)
+        return
+
+    def save_run_timing(self, timing: dict[str, Any]) -> None:
+        """Save wall-clock timing of the run (setup / capture / NBV / total, seconds) as ``timing`` group attrs."""
+        with h5.File(self.datafile_path, "a") as file:
+            group = file.require_group("timing")
+            for key, value in timing.items():
+                group.attrs[key] = value
+        return
+
+    def save_scene_frames(self, env_origins: torch.Tensor, robot_base_pose_w: torch.Tensor) -> None:
+        """
+        Save the frames needed to relate logged poses across envs and to the trees, under ``scene_frames``:
+
+        - ``env_origins`` (n_envs, 3): world position of each env (``InteractiveScene.env_origins``).
+        - ``robot_base_pose_w`` (n_envs, 7): robot root pose in world frame, (x, y, z, qx, qy, qz, qw). The base is
+          fixed, so one snapshot describes the whole run.
+
+        Tree poses in ``trees/env_<i>`` attrs are relative to the env origin; EEF poses in the evaluation file are
+        ``position - robot base position`` (world orientation).
+        """
+        with h5.File(self.datafile_path, "a") as file:
+            group = file.require_group("scene_frames")
+            for name, data in (("env_origins", env_origins), ("robot_base_pose_w", robot_base_pose_w)):
+                if name in group:
+                    del group[name]
+                group.create_dataset(name, data=data.detach().cpu().numpy().astype(np.float32))
+            group.attrs["quaternion_order"] = "xyzw"
         return

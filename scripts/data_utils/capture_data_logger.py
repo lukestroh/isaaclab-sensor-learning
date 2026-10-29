@@ -12,9 +12,25 @@ import pprint as pp
 
 
 class CaptureDataLogger:
-    def __init__(self, process_type: str = "capture", compression_level: int = 9):
+    def __init__(
+        self,
+        process_type: str = "capture",
+        compression_level: int = 9,
+        datetime_id: str | None = None,
+        file_path: str | None = None,
+    ):
+        """
+        :param datetime_id: trial id used in the file name (SL-PDC_<datetime_id>.h5). Pass the trial's own id so the
+            capture and evaluation files share it; defaults to the current time.
+        :param file_path: explicit output file (e.g. ``<out_dir>/capture.h5`` for NSGA evaluations); overrides the
+            default ``data/capture/SL-PDC_<datetime_id>.h5``.
+        """
         self.process_type = process_type
-        self.datafile_path, self.trial_name = self.get_file_path()
+        if file_path is not None:
+            os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+            self.datafile_path, self.trial_name = file_path, os.path.splitext(os.path.basename(file_path))[0]
+        else:
+            self.datafile_path, self.trial_name = self.get_file_path(datetime_id)
 
         # sensor data stuff
         self.sensor_obs_buf = {}
@@ -40,7 +56,7 @@ class CaptureDataLogger:
         buf = {
             "pose_w": [],
             "intrinsic_matrix": [],
-            "rgb": [],
+            "albedo": [],
             "depth": [],
             "instance_segmentation": [],
             "semantic_segmentation": [],
@@ -52,7 +68,7 @@ class CaptureDataLogger:
         _dict = {
             "pose_w": 0,
             "intrinsic_matrix": 0,
-            "rgb": 0,
+            "albedo": 0,
             "depth": 0,
             "instance_segmentation": 0,
             "semantic_segmentation": 0,
@@ -64,7 +80,7 @@ class CaptureDataLogger:
         _dict = {
             "pose_w": [],
             "intrinsic_matrix": [],
-            "rgb": [],
+            "albedo": [],
             "depth": [],
             "instance_segmentation": [],
             "semantic_segmentation": [],
@@ -80,14 +96,14 @@ class CaptureDataLogger:
         """Reshape a tensor of (n_poses, n_envs, ...) to numpy array of shape (n_envs, n_poses, ...)."""
         return torch.stack(tensors).transpose(*shape).cpu().numpy()
 
-    def get_file_path(self) -> tuple[str, str]:
+    def get_file_path(self, datetime_id: str | None = None) -> tuple[str, str]:
         """
         Get the file path for the data file.
         """
         pkg_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
         data_dir = os.path.join(pkg_dir, "data", self.process_type)
-        trial_name = f"SL-PDC_{dt.now().strftime('%Y%m%d_%H%M%S')}"
+        trial_name = f"SL-PDC_{datetime_id or dt.now().strftime('%Y%m%d_%H%M%S')}"
         file_path = os.path.join(data_dir, f"{trial_name}.h5")
         if not os.path.exists(data_dir):
             print(f"[INFO] Creating data directory at {data_dir}")
@@ -189,6 +205,7 @@ class CaptureDataLogger:
                 sensor_group = file.require_group(f"sensors/{sensor_name}")
                 for key, value in sensor_info.items():
                     sensor_group.attrs[key] = value
+                sensor_group.attrs["pose_w_convention"] = "ros"  # read by NBVEvaluator to pick the optical axis
 
                 self.sensor_chunk_size_dict[sensor_name]["pose_w"] = self._get_chunk_steps(
                     data_size=(self.n_envs, 7), dtype=np.float32
@@ -196,8 +213,8 @@ class CaptureDataLogger:
                 self.sensor_chunk_size_dict[sensor_name]["intrinsic_matrix"] = self._get_chunk_steps(
                     data_size=(self.n_envs, 3, 3), dtype=np.float32
                 )
-                self.sensor_chunk_size_dict[sensor_name]["rgb"] = self._get_chunk_steps(
-                    data_size=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"], 3), dtype=np.float32
+                self.sensor_chunk_size_dict[sensor_name]["albedo"] = self._get_chunk_steps(
+                    data_size=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"], 3), dtype=np.uint8
                 )
                 self.sensor_chunk_size_dict[sensor_name]["depth"] = self._get_chunk_steps(
                     data_size=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"]), dtype=np.float32
@@ -227,17 +244,18 @@ class CaptureDataLogger:
                     compression="gzip",
                     compression_opts=self.compression_level,
                 )
+                # Unlit UV texture colors (RGB of the RGBA albedo output); the NBV evaluator bins from these
                 sensor_group.require_dataset(
-                    name="rgb",
+                    name="albedo",
                     shape=(self.n_envs, n_poses, sensor_info["height"], sensor_info["width"], 3),
                     chunks=(
                         self.n_envs,
-                        self.sensor_chunk_size_dict[sensor_name]["rgb"],
+                        self.sensor_chunk_size_dict[sensor_name]["albedo"],
                         sensor_info["height"],
                         sensor_info["width"],
                         3,
                     ),
-                    dtype=np.float32,
+                    dtype=np.uint8,
                     compression="gzip",
                     compression_opts=self.compression_level,
                 )
@@ -314,10 +332,11 @@ class CaptureDataLogger:
 
         # append sensor data to buffers
         for sensor_name, sensor_data in observations.items():
-            sensor_pose_w = torch.cat([sensor_data.pos_w.torch, sensor_data.quat_w_world.torch], axis=1)  # save as pose
+            # ROS convention: optical axis is +Z (matches OffsetCfg.convention = "ros" in generate_rig)
+            sensor_pose_w = torch.cat([sensor_data.pos_w.torch, sensor_data.quat_w_ros.torch], axis=1)
             self.sensor_obs_buf[sensor_name]["pose_w"].append(sensor_pose_w.detach())
             self.sensor_obs_buf[sensor_name]["intrinsic_matrix"].append(sensor_data.intrinsic_matrices.torch.detach())
-            self.sensor_obs_buf[sensor_name]["rgb"].append(sensor_data.output["rgb"].torch.detach())
+            self.sensor_obs_buf[sensor_name]["albedo"].append(sensor_data.output["albedo"].torch[..., :3].detach())
             self.sensor_obs_buf[sensor_name]["depth"].append(sensor_data.output["depth"].torch.detach())
             self.sensor_obs_buf[sensor_name]["instance_segmentation"].append(
                 sensor_data.output["instance_segmentation"].torch.detach()
@@ -415,3 +434,23 @@ class CaptureDataLogger:
     # def _flush_buffers(self):
     #     # This method can be used to implement any additional flushing logic if needed
     #     pass
+
+    def save_scene_frames(self, env_origins: torch.Tensor, robot_base_pose_w: torch.Tensor) -> None:
+        """
+        Save the frames needed to relate logged poses across envs and to the trees, under ``scene_frames``:
+
+        - ``env_origins`` (n_envs, 3): world position of each env (``InteractiveScene.env_origins``).
+        - ``robot_base_pose_w`` (n_envs, 7): robot root pose in world frame, (x, y, z, qx, qy, qz, qw). The base is
+          fixed, so one snapshot describes the whole run.
+
+        Tree poses in ``trees/env_<i>`` attrs are relative to the env origin; EEF poses in the evaluation file are
+        ``position - robot base position`` (world orientation).
+        """
+        with h5.File(self.datafile_path, "a") as file:
+            group = file.require_group("scene_frames")
+            for name, data in (("env_origins", env_origins), ("robot_base_pose_w", robot_base_pose_w)):
+                if name in group:
+                    del group[name]
+                group.create_dataset(name, data=data.detach().cpu().numpy().astype(np.float32))
+            group.attrs["quaternion_order"] = "xyzw"
+        return
