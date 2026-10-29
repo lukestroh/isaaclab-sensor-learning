@@ -101,6 +101,7 @@ AG_ROBOT_UR10e_CFG = ArticulationCfg(
             # fix_root_link=True
         ),
         activate_contact_sensors=False,
+        fix_root_link=True,
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.0),

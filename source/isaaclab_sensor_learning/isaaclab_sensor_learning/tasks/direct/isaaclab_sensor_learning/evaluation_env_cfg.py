@@ -48,4 +48,4 @@ class PoseEvaluationEnvCfg(DirectRLEnvCfg):
         env_spacing=5.0,
     )
 
-    rig_yaml_path: str = str(Path(__file__).parent.parent.parent.parent / "config/rigs/test_rig0.yaml")
+    rig_yaml_path: str = env_params.default_rig_yaml_path

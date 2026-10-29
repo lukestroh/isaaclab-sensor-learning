@@ -5,7 +5,7 @@ from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiM
 from isaaclab.sim.spawners.sensors import PinholeCameraCfg
 import isaaclab.utils.math as math_utils
 
-from isaaclab_sensor_learning import CFG_DIR
+from isaaclab_sensor_learning import CFG_DIR, RIG_DIR
 from isaaclab_sensor_learning.sensor.yaml_to_cfg import load_sensor_yaml, rig_dict_to_sensor_cfgs
 from isaaclab_sensor_learning.sensor.spherical_sensor_layout_generator import LloydSphereSensorLayout
 from isaaclab_sensor_learning.sensor.planar_sensor_layout_generator import PlanarSensorLayout
@@ -13,6 +13,7 @@ import isaaclab_sensor_learning.sensor.camera_utils as camera_utils
 import isaaclab_sensor_learning.sensor.lidar_utils as lidar_utils
 import isaaclab_sensor_learning.sensor.rig_utils as rig_utils
 
+import os
 import torch
 import pprint as pp
 
@@ -23,11 +24,18 @@ SensorCfg = CameraCfg | MultiMeshRayCasterCameraCfg
 class RigGenerator:
     def __init__(self, rig_sensor_cfgs: list[dict]):
         self._rig_sensor_cfgs = rig_sensor_cfgs
+        self._check_unique_sensor_names()
         self._sensor_groups = self.group_sensors_by_type()
         print(f"[INFO]: Sensor groups:")
         pp.pprint(self._sensor_groups)
         # self.lloyd_layout_generator: LloydSphereSensorLayout
         # self.planar_layout_generator: PlaneSensorLayout
+        return
+
+    def _check_unique_sensor_names(self):
+        sensor_names = [sensor_cfg["name"] for sensor_cfg in self._rig_sensor_cfgs]
+        if len(sensor_names) != len(set(sensor_names)):
+            raise ValueError("Sensor names must be unique.")
         return
 
     def group_sensors_by_type(self) -> dict[str, list[str]]:
@@ -48,8 +56,9 @@ class RigGenerator:
         return sensor_groups
 
     def generate_eef_layout(self, layout_dict: dict):
-        # for now, let's combine cameras and tofs. may change later
-        optical_sensors = self._sensor_groups["camera"] + self._sensor_groups["tof"]
+        # Cameras and ToFs share one layout. Keep the rig yaml's order: sensor i sits on layout site i (for Lloyd, site 0
+        # is the pole), which is how the NSGA genome assigns models to sites (scripts/moo/rig_codec.py).
+        optical_sensors = [s for s in self._rig_sensor_cfgs if s["sensor_type"] in ("camera", "tof")]
         if layout_dict["type"] == "spherical":
             self.lloyd_layout_generator = LloydSphereSensorLayout(
                 sensors=optical_sensors,
@@ -75,6 +84,10 @@ class RigGenerator:
             )
             sensor_layout = self.planar_layout_generator.generate_sensor_layout()
 
+        if len(sensor_layout["poses"]) != len(optical_sensors):
+            raise ValueError(
+                f"Layout produced {len(sensor_layout['poses'])} sites for {len(optical_sensors)} optical sensors"
+            )
         print(f"[INFO]: Generated sensor layout:")
         pp.pprint(sensor_layout)
 
@@ -118,11 +131,20 @@ class RigGenerator:
                 offset_cfg = CameraCfg.OffsetCfg()
                 offset_cfg.pos = tuple(full_offset_pos.tolist())
                 offset_cfg.rot = tuple(full_offset_quat.tolist())
-                # offset_cfg.convention = "ros"
+                offset_cfg.convention = "ros"
 
                 prim_path = f"/World/envs/env_.*/robot/Geometry/amiga__base/amiga__body/amiga__tool0/linear_slider__base/linear_slider__base_link/linear_slider__moving_base/linear_slider__flange/linear_slider__tool0/ur10e__base_link/ur10e__base_link_inertia/ur10e__shoulder_link/ur10e__upper_arm_link/ur10e__forearm_link/ur10e__wrist_1_link/ur10e__wrist_2_link/ur10e__wrist_3_link/ur10e__flange/ur10e__tool0/{sensor_name}"
                 # prim_path = f"/World/envs/env_.*/robot/ur10e__tool0/{sensor_name}"
                 # prim_path = f"/World/envs/env_.*/{sensor_name}"
+
+                renderer_cfg = IsaacRtxRendererCfg(
+                    global_settings=IsaacRtxRendererGlobalSettingsCfg(
+                        enable_global_illumination=True,
+                        antialiasing_mode="Off",
+                    ),
+                    colorize_instance_segmentation=False,
+                    colorize_semantic_segmentation=False,
+                )
 
                 # Create sensor config
                 sensor_cfgs[sensor_name] = {
@@ -131,7 +153,9 @@ class RigGenerator:
                         prim_path=prim_path,
                         width=depth_sensor_metadata["width"],
                         height=depth_sensor_metadata["height"],
-                        data_types=["rgb", "depth", "normals", "semantic_segmentation", "instance_segmentation"],
+                        # "albedo" (unlit) instead of "rgb": the UV bins are read from texture colors, which lighting
+                        # and tonemapping distort. Without "rgb" the renderer also skips color rendering.
+                        data_types=["albedo", "depth", "normals", "semantic_segmentation", "instance_segmentation"],
                         spawn=PinholeCameraCfg.from_intrinsic_matrix(
                             intrinsic_matrix=camera_utils.get_intrinsic_matrix_from_dfov(
                                 dfov=depth_sensor_metadata["dfov"],
@@ -148,16 +172,8 @@ class RigGenerator:
                         depth_clipping_behavior="max",
                         offset=offset_cfg,
                         update_period=float(1 / sensor_metadata["data_rate_hz"]),
-                        update_latest_camera_pose=True,
-                        debug_vis=True,
-                        colorize_instance_segmentation=False,
-                        colorize_semantic_segmentation=False,
-                        renderer_cfg=IsaacRtxRendererCfg(
-                            global_settings=IsaacRtxRendererGlobalSettingsCfg(
-                                enable_global_illumination=True,
-                                antialiasing_mode="Off",
-                            )
-                        ),
+                        update_latest_camera_pose=True,                        
+                        renderer_cfg=renderer_cfg,
                     ),
                 }
 
@@ -170,11 +186,11 @@ class RigGenerator:
             sensor_cfg = sensor_dict["cfg"]
             sensor_type = sensor_dict["type"]
             if sensor_type == "camera":
-                ...
+                sensors[sensor_name] = Camera(cfg=sensor_cfg)
             elif sensor_type == "tof":
                 sensors[sensor_name] = Camera(cfg=sensor_cfg)
             elif sensor_type == "lidar":
-                ...
+                raise NotImplementedError("Lidar sensor generation not implemented yet.")
             else:
                 raise ValueError(f"Unsupported sensor type: {sensor_type}")
 
@@ -182,7 +198,7 @@ class RigGenerator:
 
 
 def main():
-    rig_yaml_path = CFG_DIR / "rigs" / "test_rig0.yaml"
+    rig_yaml_path = os.path.join(RIG_DIR, "test_rig0.yaml")
 
     sensor_cfgs = load_sensor_yaml(rig_yaml_path)
     rig_generator = RigGenerator(sensor_cfgs=sensor_cfgs)

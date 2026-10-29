@@ -16,6 +16,13 @@ import os
 from isaaclab.sim.schemas import CollisionPropertiesCfg
 
 
+from isaaclab.sensors import Camera, CameraCfg, MultiMeshRayCasterCamera, MultiMeshRayCasterCameraCfg
+from isaaclab.sim.spawners.sensors import PinholeCameraCfg
+from isaaclab_physx.renderers import IsaacRtxRendererCfg, IsaacRtxRendererGlobalSettingsCfg
+
+import isaaclab_sensor_learning.sensor.camera_utils as camera_utils
+
+
 @configclass
 class SensorLearningSceneCfg(InteractiveSceneCfg):
     """Configuration for the sensor learning scene."""
@@ -35,3 +42,4 @@ class SensorLearningSceneCfg(InteractiveSceneCfg):
     )
 
     robot: ArticulationCfg = AG_ROBOT_UR10e_CFG
+    

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from matplotlib import scale
 import torch
 from collections.abc import Sequence
 from pathlib import Path
@@ -32,7 +33,9 @@ class SensorLearningEnv(DirectRLEnv):
         self._rig_cfg = yaml_to_cfg.load_yaml(yaml_path=Path(rig_yaml_path))
         layout_type = self._rig_cfg.get("layout", {}).get("type", None)
         self._rig_template = yaml_to_cfg.load_yaml(yaml_path=Path(SCRIPTS_DIR) / f"moo/config/{layout_type}_search_space.yaml")
-        
+
+        self.debug_plots = False
+
 
         # self._sensor_cfgs = yaml_to_cfg.rig_yaml_to_sensor_cfgs(rig_yaml_path=cfg.rig_yaml_path) # TODO: change to dict later
         super().__init__(cfg, render_mode, **kwargs)
@@ -51,7 +54,7 @@ class SensorLearningEnv(DirectRLEnv):
             cfg=DifferentialIKControllerCfg(
                 command_type="pose", use_relative_mode=False, ik_method="dls", ik_params={"lambda_val": 0.01}
             ),
-            num_envs=self.cfg.num_envs,
+            num_envs=self.num_envs,  # scene's env count (cfg.scene.num_envs), which --num-envs overrides
             device=self.device,
         )
         self.ik_controller.reset()
@@ -63,6 +66,7 @@ class SensorLearningEnv(DirectRLEnv):
         self.rng = torch.Generator(device=self.device)
         self.joint_limits = self.robot.data.joint_limits.torch
         self.sim_state = "capture"  # "capture" or "evaluate"
+
 
         return
 
@@ -81,11 +85,40 @@ class SensorLearningEnv(DirectRLEnv):
         self.eef_sensor_layout = self.rig_generator.generate_eef_layout(layout_dict=self.eef_layout_dict)
         self.eef_sensor_cfgs = self.rig_generator.generate_eef_sensor_cfgs(sensor_layout=self.eef_sensor_layout)
 
+        if self.debug_plots:
+            poses = self.eef_sensor_layout["poses"]
+            import plotly.graph_objects as go
+            fig = go.Figure()
+            for i, pose in enumerate(poses):
+                # get u, v, w axes from pose
+                xyz = pose[0:3]
+                rot = pose[3:7]
+                rot_mat = math_utils.matrix_from_quat(torch.tensor(rot, dtype=torch.float32))
+                world_z = torch.tensor([0.0, 0.0, 1.0], dtype=torch.float32)
+                ori_vec = rot_mat @ world_z
+                fig.add_trace(
+                    go.Cone(
+                        x=[xyz[0]],
+                        y=[xyz[1]],
+                        z=[xyz[2]],
+                        u=[ori_vec[0].item()],
+                        v=[ori_vec[1].item()],
+                        w=[ori_vec[2].item()],
+                        anchor="tail",
+                        name=f"Sensor {i}",
+                        sizemode="scaled",
+                        sizeref=0.1**2,
+                    )
+                )
+            fig.update_layout(scene=dict(aspectmode="data",))
+            fig.show()
+
         self.robot = self.scene.articulations["robot"]
 
         self.eef_sensors = self.rig_generator.generate_rig(sensor_cfgs=self.eef_sensor_cfgs)
         self.scene.sensors.update(self.eef_sensors)
         self.sensors = self.scene.sensors
+        # self.sensors = {'tof0': self.scene.sensors['tof0']}
 
         frame_marker_cfg = FRAME_MARKER_CFG.copy()
         frame_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
@@ -101,7 +134,7 @@ class SensorLearningEnv(DirectRLEnv):
         return
 
     def _apply_action(self) -> None:
-        eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
+        # eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
         # print("     ", eef_pose_w[0])
         if self.sim_state == "capture":
             ...
@@ -116,7 +149,7 @@ class SensorLearningEnv(DirectRLEnv):
                 eef_jacobi_idx = self.robot_entity_cfg.body_ids[0]
             jacobi_joint_ids = [j + self.robot.num_base_dofs for j in self.robot_entity_cfg.joint_ids]
             jacobians = self.robot.data.body_link_jacobian_w.torch[:, eef_jacobi_idx, :, jacobi_joint_ids]
-            # eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
+            eef_pose_w = self.robot.data.body_pose_w.torch[:, self.robot_entity_cfg.body_ids[0]]
             root_pose_w = self.robot.data.root_pose_w.torch
             joint_pos = self.robot.data.joint_pos.torch[:, self.robot_entity_cfg.joint_ids]
 
@@ -129,29 +162,10 @@ class SensorLearningEnv(DirectRLEnv):
             self.robot.set_joint_position_target_index(target=joint_pos_des, joint_ids=self.robot_entity_cfg.joint_ids)
             self.scene.write_data_to_sim()
 
-        # Update sensor poses since IsaacSim does not automatically update sensor poses when the parent link moves. This is a known issue with IsaacSim.
-        # TODO: check if this has been updated.
-
-        #     sensor_cfg = sensor.cfg
-        #     parent_offset = sensor_cfg.offset
-        #     new_sensor_pos_w, new_sensor_quat_w = math_utils.combine_frame_transforms(
-        #         t01=eef_pose_w[:, 0:3],
-        #         q01=eef_pose_w[:, 3:7],
-        #         t12=torch.tensor(parent_offset.pos, device=self.device).unsqueeze(0).repeat(self.cfg.num_envs, 1),
-        #         q12=torch.tensor(parent_offset.rot, device=self.device).unsqueeze(0).repeat(self.cfg.num_envs, 1),
-        #     )
-        #     sensor.set_world_poses(positions=new_sensor_pos_w, orientations=new_sensor_quat_w)
-        #     self.sim.step()
-        #     if sensor_name == "tof0":
-        #         print(sensor_name)
-        #         print(new_sensor_quat_w)
-        #         # print(f"\n{parent_offset.pos}")
-        #         print(f"\n{sensor.data.quat_w_world.torch}")
-
         # update marker poses
         eef_pose_w = self.robot.data.body_state_w.torch[:, self.robot_entity_cfg.body_ids[0], 0:7]
-        self.eef_markers.visualize(eef_pose_w[:, 0:3], eef_pose_w[:, 3:7])
-        self.goal_markers.visualize(self.actions[:, 0:3] + self.scene.env_origins, self.actions[:, 3:7])
+        # self.eef_markers.visualize(eef_pose_w[:, 0:3], eef_pose_w[:, 3:7])
+        # self.goal_markers.visualize(self.actions[:, 0:3] + self.scene.env_origins, self.actions[:, 3:7])
 
         return
 

@@ -30,7 +30,7 @@ class JointStateCollectionEnv(DirectRLEnv):
 
         super().__init__(cfg, render_mode, **kwargs)
 
-        self.robot_entity_cfg = SceneEntityCfg(name="robot", joint_names=[".*"], body_names=["ur10e__tool0"])
+        self.robot_entity_cfg = SceneEntityCfg(name="robot", joint_names=[".*"], body_names=["ur10e__wrist_3_link"])
         self.robot_entity_cfg.resolve(self.scene)
         joint_pos = self.robot.data.default_joint_pos.clone()
         joint_vel = self.robot.data.default_joint_vel.clone()
@@ -57,7 +57,7 @@ class JointStateCollectionEnv(DirectRLEnv):
     def _setup_scene(self):
         self.robot = self.scene.articulations["robot"]
 
-        self.scene.clone_environments(copy_from_source=True)
+        # self.scene.clone_environments(copy_from_source=True)
 
         # markers
         frame_marker_cfg = FRAME_MARKER_CFG.copy()

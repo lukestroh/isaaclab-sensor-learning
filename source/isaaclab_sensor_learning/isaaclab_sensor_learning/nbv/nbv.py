@@ -2,22 +2,58 @@
 from dataclasses import dataclass, field
 
 import h5py as h5
-import json
 import numpy as np
-import os
-import time
-import cv2
 import torch
 
 from isaaclab.utils import math as math_utils
+from isaaclab_sensor_learning.utils import h5py_utils
+from isaaclab_sensor_learning.nbv import coverage_metrics
+from isaaclab_sensor_learning.nbv.coverage_metrics import INSTANCE_CLASSES, CoverageConfig, instance_class  # noqa: F401
 
 _SKIP_INSTANCE_LABELS = {"BACKGROUND", "UNLABELLED"}
+
+# Optical axis of a stored sensor pose_w quaternion, by camera convention (the sensor group's "pose_w_convention"
+# attr): (rotation-matrix column, sign).
+_OPTICAL_AXIS = {"ros": (2, 1.0), "opengl": (2, -1.0), "world": (0, 1.0)}
+
+# Camera output carrying the tree's UV texture colors. Unlit, so colors decode to the right bins (the lit "rgb" output
+# is tonemapped and tinted, which pushes pixels into wrong, too-low bins).
+_UV_COLOR_KEY = "albedo"
+
+
+def valid_pixel_mask(
+    depth: torch.Tensor,
+    normals: torch.Tensor,
+    sensor_quat: torch.Tensor,
+    z_near: float,
+    z_far: float,
+    max_incidence_deg: float,
+    convention: str = "ros",
+) -> torch.Tensor:
+    """
+    Pixels that count as observations: depth in [z_near, z_far) and the surface faces the sensor within
+    ``max_incidence_deg`` of its optical axis. Shared by predicted (stored) and live binning so the two agree.
+
+    :param depth: (B, H, W) depth.
+    :param normals: (B, H, W, 3) world-frame surface normals.
+    :param sensor_quat: (B, 4) sensor orientation (x, y, z, w) in ``convention``.
+    :param convention: camera convention of ``sensor_quat``; selects the optical axis (see ``_OPTICAL_AXIS``).
+    :return: (B, H, W) bool mask.
+    """
+    axis, sign = _OPTICAL_AXIS[convention]
+    view_dir = sign * math_utils.matrix_from_quat(sensor_quat)[:, :, axis]  # (B, 3)
+    cosang = (-normals * view_dir[:, None, None, :]).sum(dim=-1).clamp(-1.0, 1.0)
+    normals_mask = torch.acos(cosang) <= np.radians(max_incidence_deg)  # NaN normals compare False
+    depth_mask = (depth >= z_near) & (depth < z_far)
+    return normals_mask & depth_mask
 
 
 @dataclass
 class ObservationConfig:
     max_incidence_angle: float = 45.0  # degrees
     pose_search_radius: float = 0.5  # radius for finding neighboring poses
+    candidate_batch_size: int = 16  # max candidate poses read from disk / held in VRAM at once
+    cache_pose_deltas: bool = True  # cache each candidate's sparse bin delta so it is only read from disk once
 
 
 @dataclass
@@ -35,24 +71,24 @@ class GainConfig:
 
 
 class BinnedTree:
+    """
+    Per-env bin counts of shape (n_instances, n_length_bins, n_theta_bins).
+
+    Tree parts are textured with ``uv.png``: R encodes the theta (around) coordinate and G the length (along)
+    coordinate, both 0-255 across the full UV range, with B = 0. A pixel's bin is read straight from its color.
+    """
+
     def __init__(
         self,
         n_envs: int,
         unique_instances: dict,
         n_length_bins: int = 20,
         n_theta_bins: int = 36,
-        uv_bin_img: str = os.path.join(os.path.dirname(__file__), "uv.png"),
         device: str = "cuda:0",
     ):
-        self.uv_bin_img = uv_bin_img
-        self.uv_img = cv2.imread(self.uv_bin_img, cv2.IMREAD_UNCHANGED)
         self.device = device
-
         self.n_length_bins = n_length_bins
         self.n_theta_bins = n_theta_bins
-
-        self.rgb_bins = self._create_rgb_bins()
-        self.rgb_to_bin_lut = self._create_rgb_to_bin_lut()
         self.unique_instances = unique_instances
         self.bin_counts = {
             f"env_{i}": torch.zeros(
@@ -64,49 +100,19 @@ class BinnedTree:
         }
         return
 
-    def _create_rgb_bins(self):
-        h, w = self.uv_img.shape[:2]
-
-        length_edges = np.linspace(0, h, self.n_length_bins + 1, dtype=int)
-        theta_edges = np.linspace(0, w, self.n_theta_bins + 1, dtype=int)
-
-        pixel_bins = np.empty((h, w, 2), dtype=np.uint16)
-
-        for i in range(self.n_length_bins):
-            y0, y1 = length_edges[i], length_edges[i + 1]
-
-            for j in range(self.n_theta_bins):
-                x0, x1 = theta_edges[j], theta_edges[j + 1]
-
-                pixel_bins[y0:y1, x0:x1] = (i, j)
-        return pixel_bins
-
-    def _create_rgb_to_bin_lut(self):
+    def uv_color_to_bin(self, uv_colors: torch.Tensor) -> torch.Tensor:
         """
-        Create a lookup table (LUT) that maps RGB values to bin indices based on the provided UV image.
+        Convert UV texture colors to (length_bin, theta_bin).
 
-        NOTE: cv2.imread returns BGR; this converts to RGB so the LUT matches sensor RGB order.
+        :param uv_colors: (..., C >= 3) colors in 0-255 (uint8 from the camera, or float32 as stored in h5).
+            Each 8-bit value is read at its center, (c + 0.5) / 256, as a normalized UV coordinate.
+        :return: (..., 2) int64 bins on ``uv_colors``' device.
         """
-        if self.uv_bin_img is None:
-            raise ValueError("UV bin img is None.")
-
-        img = self.uv_img[..., :3][..., ::-1].astype(np.int32)
-        lut = np.full((256, 256, 256, 2), -1, dtype=np.int16)
-        lut[img[..., 0], img[..., 1], img[..., 2]] = self.rgb_bins
-        # print(lut)
-        return lut
-
-    def rgb_to_bin(self, rgb_batch: torch.Tensor) -> torch.Tensor:
-        """Convert RGB to (length_bin, theta_bin) using a CPU LUT. Avoids GPU advanced indexing."""
-        rgb_np = rgb_batch.detach().cpu().numpy().astype(np.float32)
-        if rgb_np.size == 0:
-            return torch.empty(rgb_batch.shape[:-1] + (2,), dtype=torch.int64, device=self.device)
-        rgb_np = np.nan_to_num(rgb_np, nan=0.0, posinf=0.0, neginf=0.0)
-        if float(np.max(rgb_np)) <= 1.01:
-            rgb_np = rgb_np * 255.0
-        rgb_i = np.clip(rgb_np[..., :3], 0, 255).astype(np.int32)
-        bins = self.rgb_to_bin_lut[rgb_i[..., 0], rgb_i[..., 1], rgb_i[..., 2]]
-        return torch.from_numpy(np.ascontiguousarray(bins, dtype=np.int64)).to(device=self.device)
+        rgb = torch.nan_to_num(uv_colors[..., :3].to(dtype=torch.float32), nan=0.0, posinf=0.0, neginf=0.0)
+        rgb = rgb.clamp(0.0, 255.0)
+        theta = ((rgb[..., 0] + 0.5) * (self.n_theta_bins / 256.0)).long().clamp(0, self.n_theta_bins - 1)
+        length = ((rgb[..., 1] + 0.5) * (self.n_length_bins / 256.0)).long().clamp(0, self.n_length_bins - 1)
+        return torch.stack((length, theta), dim=-1)
 
 
 def _n_custom_ids(prim_path_to_custom_id: dict) -> int:
@@ -136,34 +142,51 @@ def _extract_id_to_labels(info: dict | None) -> dict:
     """Return instance idToLabels from a camera info dict, if present."""
     if not isinstance(info, dict):
         return {}
-    instance_info = info.get("instance_segmentation_fast", {})
+    instance_info = info.get("instance_segmentation", {})
     if not isinstance(instance_info, dict):
         return {}
     return instance_info.get("idToLabels") or instance_info.get("idsToLabels") or {}
 
 
 class NBVEvaluator:
+    """
+    Greedy next-best-view evaluator over pre-captured poses.
+
+    Pose/tree metadata is loaded eagerly. Sensor images stay on disk and are only read for the candidate
+    poses being scored, ``ObservationConfig.candidate_batch_size`` poses at a time.
+    """
+
     def __init__(
         self,
-        trial_data: dict,
+        trial_data_path: str,
         observation_config: ObservationConfig,
         gain_config: GainConfig,
         device: str = "cuda:0",
         n_envs: int = 1,
+        coverage_config: CoverageConfig | None = None,
     ) -> None:
         self.device = device
         self.n_envs = n_envs
+        self.observation_config = observation_config
+        self.gain_config = gain_config
+        self.coverage_config = coverage_config if coverage_config is not None else CoverageConfig()
+
+        # Kept open for the lifetime of the evaluator; call close() when done.
+        self.h5_file = h5.File(trial_data_path, "r")
+        trial_data = h5py_utils.h5_to_dict(self.h5_file, attrs_only=("sensors",))
+        self.sensor_attrs = {name: group["attrs"] for name, group in trial_data["sensors"].items()}
         self.poses = torch.tensor(
             trial_data["poses"]["actual_poses"]["eef_poses"], dtype=torch.float32, device=self.device
         )
-        self.trial_data = trial_data
-        self.observation_config = observation_config
-        self.gain_config = gain_config
+        self.skipped_poses = torch.from_numpy(
+            np.ascontiguousarray(trial_data["poses"]["actual_poses"].get("skipped_poses", []))
+        ).to(device=self.device)
 
         self.prim_path_to_custom_id = {f"env_{i}": {} for i in range(self.n_envs)}
         self.render_id_to_prim_path = {f"env_{i}": {} for i in range(self.n_envs)}
         self.h5_render_id_lut = {}
         self.instance_semantic_weight = {}
+        self.instance_class_ids = {}
 
         for i in range(self.n_envs):
             env_key = f"env_{i}"
@@ -189,44 +212,67 @@ class NBVEvaluator:
                 env_idx=i, render_id_to_prim_path=self.render_id_to_prim_path[env_key]
             )
             self.instance_semantic_weight[env_key] = self._build_instance_semantic_weights(env_key)
+            self.instance_class_ids[env_key] = coverage_metrics.class_ids_from_prim_map(
+                self.prim_path_to_custom_id[env_key], device=self.device
+            )
 
-        self.unique_instances = self.prim_path_to_custom_id
         self.binned_tree = BinnedTree(
             unique_instances=self.prim_path_to_custom_id, n_envs=self.n_envs, device=self.device
         )
-        self.skipped_poses = torch.from_numpy(
-            np.ascontiguousarray(trial_data["poses"]["actual_poses"].get("skipped_poses", []))
-        ).to(device=self.device)
-        self.sensor_tensors = {}
-        for sensor_name, sensor_data in trial_data["sensors"].items():
-            self.sensor_tensors[sensor_name] = {
-                "pose": self._h5_to_device(sensor_data["pose_w"]),
-                "rgb": self._h5_to_device(sensor_data["rgb"]),
-                "depth": self._h5_to_device(sensor_data["depth"]),
-                "normals": self._h5_to_device(sensor_data["normals"]),
-                "instance_segmentation": self._h5_to_device(sensor_data["instance_segmentation"]),
-                "attrs": sensor_data["attrs"],
-            }
-        self._dbg_to_tensor_calls = 0
-        self._dbg_accumulate_logs = 0
+
+        # (env_id, pose_id) -> sparse bin-count delta summed over all sensors. Captured data is static,
+        # so a candidate's delta never changes; only its score (which depends on live counts) does.
+        self._pose_delta_cache: dict[tuple[int, int], torch.Tensor] = {}
+        # last seen Camera.frame per sensor, so live binning only counts freshly rendered frames
+        self._last_frames: dict[str, torch.Tensor] = {}
         return
 
-    def _h5_to_device(self, array) -> torch.Tensor:
-        """Move an H5 numpy array to the evaluator device once. Does not wrap live observations."""
-        if isinstance(array, torch.Tensor):
-            return array
-        return torch.from_numpy(np.ascontiguousarray(array)).to(device=self.device)
+    def close(self) -> None:
+        self.h5_file.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
 
     def _semantic_weight_from_prim_path(self, prim_path: str) -> float:
-        """Map a tree prim path to a class gain. Prefer leaf type (spur > branch > trunk)."""
-        name = prim_path.lower()
-        if "spur" in name:
-            return float(self.gain_config.branch_gains["spur"])
-        if "branch" in name:
-            return float(self.gain_config.branch_gains["branch"])
-        if "trunk" in name:
-            return float(self.gain_config.branch_gains["trunk"])
-        return 1.0
+        """Map a tree prim path to its class gain (see ``instance_class``); unknown classes get 1.0."""
+        cls = instance_class(prim_path)
+        return float(self.gain_config.branch_gains[cls]) if cls in self.gain_config.branch_gains else 1.0
+
+    def instance_coverage(self, min_hits: tuple[int, ...] | None = None) -> dict[str, dict[str, dict]]:
+        """
+        Instance detection from the live bin counts (``coverage_metrics.instance_coverage``), per env.
+
+        :param min_hits: hit thresholds; defaults to ``coverage_config.instance_min_hits``.
+        :return: ``{env_key: {cls: {"n_instances": int, "seen": {k: fraction}}}}``.
+        """
+        min_hits = tuple(self.coverage_config.instance_min_hits if min_hits is None else min_hits)
+        return {
+            env_key: coverage_metrics.instance_coverage(counts, self.instance_class_ids[env_key], min_hits)
+            for env_key, counts in self.binned_tree.bin_counts.items()
+        }
+
+    def instance_extent_per_instance(self, env_key: str, min_hits: int) -> dict[str, torch.Tensor]:
+        """Per-instance extent of one env at threshold ``min_hits`` (``coverage_metrics.instance_extent_per_instance``)."""
+        return coverage_metrics.instance_extent_per_instance(
+            self.binned_tree.bin_counts[env_key], self.instance_class_ids[env_key], min_hits, self.coverage_config
+        )
+
+    def instance_extent(self, min_hits: tuple[int, ...] | None = None) -> dict[str, dict[str, dict]]:
+        """
+        Per-class extent from the live bin counts (``coverage_metrics.instance_extent``), per env.
+
+        :return: ``{env_key: {cls: {k: {"length_coverage", "theta_coverage", "continuous"}}}}``.
+        """
+        min_hits = tuple(self.coverage_config.instance_min_hits if min_hits is None else min_hits)
+        return {
+            env_key: coverage_metrics.instance_extent(
+                counts, self.instance_class_ids[env_key], min_hits, self.coverage_config
+            )
+            for env_key, counts in self.binned_tree.bin_counts.items()
+        }
 
     def _build_instance_semantic_weights(self, env_key: str) -> torch.Tensor:
         """Build a (n_instances,) tensor of class weights indexed by custom id."""
@@ -269,7 +315,7 @@ class NBVEvaluator:
         return lut
 
     def _filter_pose_candidates(
-        self, env_ids: torch.Tensor, closest_idxs: torch.Tensor, trial_data_dict: dict
+        self, env_ids: torch.Tensor, closest_idxs: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Validate env IDs and keep only candidate rows for requested envs and non-skipped poses."""
         if env_ids.numel() == 0:
@@ -285,63 +331,77 @@ class NBVEvaluator:
         filtered = filtered[torch.isin(filtered[:, 0], env_ids)]
         return env_ids, filtered
 
-    def _build_masked_dict(
-        self, selected_envs: list[int], closest_idxs_env: torch.Tensor, trial_data_dict: dict
-    ) -> dict:
+    def _load_masked_sensor_batch(self, sensor_name: str, env_id: int, pose_ids: np.ndarray) -> dict:
         """
-        Build per-env/per-sensor masked RGB, instance segmentation, and validity tensors.
+        Read one sensor's captured data for a batch of poses in one env and mask out invalid pixels.
 
-        :param selected_envs: Environment IDs to keep.
-        :param closest_idxs_env: Candidate (env_id, pose_id) pairs filtered to selected_envs.
-        :param trial_data_dict: Trial metadata dictionary.
-        :return: Nested dict keyed by env and sensor name.
+        Pixel validity is ``valid_pixel_mask`` (the same mask live binning uses).
+
+        :param pose_ids: Sorted, unique pose indices (required by h5py fancy indexing).
+        :return: Dict with "uv_color" (B, H, W, 3), "instance_segmentation" (B, H, W), and "valid_mask" (B, H, W).
         """
-        masked_dict = {f"env_{i}": {} for i in selected_envs}
-        env_idxs = closest_idxs_env[:, 0]
-        pose_idxs = closest_idxs_env[:, 1]
+        group = self.h5_file[f"sensors/{sensor_name}"]
+        attrs = self.sensor_attrs[sensor_name]
+        data = {
+            key: torch.from_numpy(group[key][env_id, pose_ids]).to(device=self.device)
+            for key in ("pose_w", _UV_COLOR_KEY, "depth", "normals", "instance_segmentation")
+        }
+        valid_mask = valid_pixel_mask(
+            depth=data["depth"],
+            normals=data["normals"],
+            sensor_quat=data["pose_w"][:, 3:7],
+            z_near=attrs["z_near"],
+            z_far=attrs["z_far"],
+            max_incidence_deg=self.observation_config.max_incidence_angle,
+            convention=str(attrs["pose_w_convention"]),
+        )
+        return {
+            "uv_color": data[_UV_COLOR_KEY][..., :3],
+            "instance_segmentation": data["instance_segmentation"],
+            "valid_mask": valid_mask,
+        }
 
-        for sensor_name, sensor_t in self.sensor_tensors.items():
-            sensor_height = sensor_t["attrs"]["height"]
-            sensor_width = sensor_t["attrs"]["width"]
+    def _compute_pose_deltas(self, env_id: int, pose_ids: np.ndarray) -> list[torch.Tensor]:
+        """
+        Compute the predicted bin-count delta (summed over sensors) for each pose, reading from disk in batches.
 
-            sensor_pose_data = sensor_t["pose"][env_idxs, pose_idxs].flatten(start_dim=0, end_dim=-2)
+        :param pose_ids: Sorted, unique pose indices for ``env_id``.
+        :return: One sparse (n_instances, n_length_bins, n_theta_bins) delta per pose, in ``pose_ids`` order.
+        """
+        env_key = f"env_{env_id}"
+        render_id_lut = self.h5_render_id_lut[env_key]
+        live_counts = self.binned_tree.bin_counts[env_key]
+        batch_size = self.observation_config.candidate_batch_size
 
-            sensor_orientations = sensor_pose_data[:, 3:7]
-            sensor_orientations_matrix = math_utils.matrix_from_quat(sensor_orientations)
-            sensor_orientation_v = sensor_orientations_matrix @ torch.tensor([[0.0, 0.0, 1.0]], device=self.device).T
-            sensor_orientation_v = (
-                sensor_orientation_v.transpose(1, 2)
-                .reshape(-1, 3)
-                .repeat_interleave(sensor_height * sensor_width, dim=0)
-            )
+        pose_deltas = []
+        for start in range(0, len(pose_ids), batch_size):
+            batch_pose_ids = pose_ids[start : start + batch_size]
+            sensor_batches = [
+                self._load_masked_sensor_batch(sensor_name, env_id, batch_pose_ids)
+                for sensor_name in self.sensor_attrs
+            ]
+            for local_idx in range(len(batch_pose_ids)):
+                pose_delta = torch.zeros_like(live_counts)
+                for sensor_batch in sensor_batches:
+                    self._accumulate_pose_delta_from_sensor(
+                        pose_delta=pose_delta,
+                        sensor_data=sensor_batch,
+                        observation_idx=local_idx,
+                        render_id_lut=render_id_lut,
+                    )
+                pose_deltas.append(pose_delta.to_sparse().coalesce())
+        return pose_deltas
 
-            normals_data = sensor_t["normals"][env_idxs, pose_idxs] * -1
-            flattened_normals = normals_data.flatten(start_dim=0, end_dim=-2)
-            cosang = (flattened_normals * sensor_orientation_v).sum(dim=-1).clamp(-1.0, 1.0)
-            angles = torch.acos(cosang)
-            normals_mask = angles <= np.radians(self.observation_config.max_incidence_angle)
+    def _get_pose_deltas(self, env_id: int, pose_ids: np.ndarray) -> list[torch.Tensor]:
+        """Return pose deltas for ``pose_ids``, only reading poses that are not already cached."""
+        if not self.observation_config.cache_pose_deltas:
+            return self._compute_pose_deltas(env_id, pose_ids)
 
-            depth_data = sensor_t["depth"][env_idxs, pose_idxs].flatten()
-            depth_mask = (depth_data >= sensor_t["attrs"]["z_near"]) & (depth_data < sensor_t["attrs"]["z_far"])
-
-            rgb_data = sensor_t["rgb"][env_idxs, pose_idxs].flatten(start_dim=0, end_dim=-2)
-            instance_data = sensor_t["instance_segmentation"][env_idxs, pose_idxs].reshape(-1, 1)
-
-            permissible_mask = (normals_mask & depth_mask).unsqueeze(-1)
-            rgb_masked = (rgb_data * permissible_mask).reshape(-1, sensor_height, sensor_width, 3)
-            instance_masked = (instance_data * permissible_mask).reshape(-1, sensor_height, sensor_width)
-            valid_mask = (normals_mask & depth_mask).reshape(-1, sensor_height, sensor_width)
-
-            for i in selected_envs:
-                env_key = f"env_{i}"
-                env_mask = env_idxs == i
-                masked_dict[env_key][sensor_name] = {
-                    "rgb": rgb_masked[env_mask],
-                    "instance_segmentation": instance_masked[env_mask],
-                    "valid_mask": valid_mask[env_mask],
-                }
-
-        return masked_dict
+        missing = np.array([p for p in pose_ids if (env_id, int(p)) not in self._pose_delta_cache], dtype=np.int64)
+        if missing.size > 0:
+            for pose_id, pose_delta in zip(missing, self._compute_pose_deltas(env_id, missing)):
+                self._pose_delta_cache[(env_id, int(pose_id))] = pose_delta
+        return [self._pose_delta_cache[(env_id, int(p))] for p in pose_ids]
 
     def _map_render_ids_to_custom_ids(self, render_ids: torch.Tensor, render_id_lut: torch.Tensor) -> torch.Tensor:
         """Vectorized map from Isaac Sim instance IDs to custom bin-row ids. Unmapped values are -1.
@@ -362,22 +422,20 @@ class NBVEvaluator:
         ``render_id_lut`` (render id -> custom id) before indexing bins.
 
         :param pose_delta: Dense count updates for one environment, shape (n_instances, n_length_bins, n_theta_bins).
-        :param sensor_data: Sensor observation dictionary with keys "rgb", "instance_segmentation", and "valid_mask".
+        :param sensor_data: Dictionary with "uv_color", "instance_segmentation", and "valid_mask" batches.
         :param observation_idx: Observation index inside the provided sensor batch.
         :param render_id_lut: 1D tensor mapping render instance IDs to custom ids.
         :return: Tuple of (instance_indices, length_bin_indices, theta_bin_indices) for touched bins.
         """
-        rgb_pose = sensor_data["rgb"][observation_idx]
         instance_pose = sensor_data["instance_segmentation"][observation_idx].to(dtype=torch.int64)
         valid_pose = sensor_data["valid_mask"][observation_idx]
-        bin_pose = self.binned_tree.rgb_to_bin(rgb_pose)
+        bin_pose = self.binned_tree.uv_color_to_bin(sensor_data["uv_color"][observation_idx])
 
-        flat_valid = valid_pose.reshape(-1)
-        flat_bin_l = bin_pose[..., 0].reshape(-1).to(dtype=torch.int64)
-        flat_bin_t = bin_pose[..., 1].reshape(-1).to(dtype=torch.int64)
+        valid = valid_pose.reshape(-1)
+        flat_bin_l = bin_pose[..., 0].reshape(-1)
+        flat_bin_t = bin_pose[..., 1].reshape(-1)
         flat_instance = instance_pose.reshape(-1)
 
-        valid = flat_valid & (flat_bin_l >= 0) & (flat_bin_t >= 0)
         if not torch.any(valid):
             empty = torch.empty((0,), dtype=torch.int64, device=self.device)
             return empty, empty, empty
@@ -403,49 +461,6 @@ class NBVEvaluator:
         )
         return observed_instance_idxs, observed_length_bins, observed_theta_bins
 
-    def _select_best_pose_for_env(
-        self,
-        env_key: str,
-        env_pose_candidates: torch.Tensor,
-        env_sensor_data: dict,
-        render_id_lut: torch.Tensor,
-        sensor_names: list[str],
-    ) -> int | None:
-        """Return the local candidate index that maximizes predicted coverage gain for one environment."""
-        if env_pose_candidates.numel() == 0:
-            return None
-
-        num_pose_candidates = int(env_pose_candidates.shape[0])
-        live_counts = self.binned_tree.bin_counts[env_key]
-        instance_weights = self.instance_semantic_weight[env_key]
-
-        best_local_idx = 0
-        best_score = torch.tensor(float("-inf"), device=self.device)
-
-        for pose_local_idx in range(num_pose_candidates):
-            pose_delta = torch.zeros_like(live_counts, device=self.device)
-
-            for sensor_name in sensor_names:
-                sensor_data = env_sensor_data.get(sensor_name)
-                if sensor_data is None:
-                    continue
-                self._accumulate_pose_delta_from_sensor(
-                    pose_delta=pose_delta,
-                    sensor_data=sensor_data,
-                    observation_idx=pose_local_idx,
-                    render_id_lut=render_id_lut,
-                )
-
-            score = self.score_pose_delta(
-                pose_delta=pose_delta, live_counts=live_counts, instance_weights=instance_weights
-            )
-            # print(score)
-            if score > best_score:
-                best_score = score
-                best_local_idx = pose_local_idx
-
-        return best_local_idx
-
     def score_pose_delta(
         self, pose_delta: torch.Tensor, live_counts: torch.Tensor, instance_weights: torch.Tensor
     ) -> float:
@@ -455,30 +470,23 @@ class NBVEvaluator:
         Predicted bin gains from all sensors (already summed into ``pose_delta``) are
         weighted by each instance's semantic class.
 
-        :param pose_delta: Candidate count delta with shape (n_instances, n_length_bins, n_theta_bins).
+        :param pose_delta: Coalesced sparse count delta with shape (n_instances, n_length_bins, n_theta_bins).
         :param live_counts: Current bin counts with the same shape as ``pose_delta``.
         :param instance_weights: Per-instance class weights, shape (n_instances,).
         :return: A float score for the pose delta.
         """
-        if pose_delta.numel() == 0:
+        observed = pose_delta.values() > 0
+        if not torch.any(observed):
             return 0.0
 
-        observed_mask = pose_delta > 0
-        if not torch.any(observed_mask):
-            return 0.0
-
-        projected_counts = (live_counts[observed_mask] + pose_delta[observed_mask]).to(dtype=torch.float32)
+        instance_idxs, length_idxs, theta_idxs = pose_delta.indices()[:, observed]
+        projected_counts = (
+            live_counts[instance_idxs, length_idxs, theta_idxs] + pose_delta.values()[observed]
+        ).to(dtype=torch.float32)
         gains = self.gain_config.saturation_lambda / (
             1 + torch.exp(self.gain_config.steepness * (projected_counts - self.gain_config.n_midpoint))
         )
-        # print(gains)
-        # print("\nprojected_counts\n", projected_counts)
-        # print("\nlive_counts:\n", live_counts[observed_mask])
-        # print("pose_delta\n", pose_delta[observed_mask])
-        # print(gains)
-        instance_idxs = torch.nonzero(observed_mask, as_tuple=False)[:, 0]
         weighted_gains = gains * instance_weights[instance_idxs]
-        # print(float(weighted_gains.sum().item()))
         return float(weighted_gains.sum().item())
 
     def get_closest_pose_idxs(self, curr_poses: torch.Tensor):
@@ -493,50 +501,88 @@ class NBVEvaluator:
 
         return torch.nonzero(mask, as_tuple=False)
 
+    def get_candidate_pose_idxs(
+        self,
+        curr_poses: torch.Tensor,
+        env_ids: list[int],
+        visited: torch.Tensor | None = None,
+        max_radius: float = float("inf"),
+    ) -> tuple[torch.Tensor, list[int]]:
+        """
+        Per env: unvisited, non-skipped captured poses near the current EEF pose.
+
+        The search radius starts at ``pose_search_radius`` and grows (x1.1, x2.2, ... of it) until it reaches the
+        nearest eligible pose. An env whose nearest eligible pose is farther than ``max_radius`` (or that has none
+        left) is exhausted.
+
+        :param curr_poses: (n_envs, >=3) current EEF poses in world frame.
+        :param visited: (n_envs, n_poses) bool, poses already used as goals.
+        :return: ((N, 2) candidate (env_id, pose_id) rows, list of exhausted env ids).
+        """
+        base_radius = self.observation_config.pose_search_radius
+        eligible = torch.ones(self.poses.shape[:2], dtype=torch.bool, device=self.device)
+        if self.skipped_poses.numel() > 0:
+            eligible[:, self.skipped_poses.long()] = False
+        if visited is not None:
+            eligible &= ~visited.to(self.device)
+
+        rows, exhausted = [], []
+        for env_id in env_ids:
+            dists = (self.poses[env_id, :, :3] - curr_poses[env_id, :3].to(self.device)).norm(dim=-1)
+            if not bool(eligible[env_id].any()):
+                exhausted.append(env_id)
+                continue
+            nearest = float(dists[eligible[env_id]].min())
+            if nearest > max_radius:
+                exhausted.append(env_id)
+                continue
+            radius, k = base_radius, 1
+            while radius < nearest:  # same growth schedule as get_closest_pose_idxs
+                radius, k = base_radius * 1.1 * k, k + 1
+            pose_ids = torch.nonzero(eligible[env_id] & (dists <= radius), as_tuple=False)[:, 0]
+            rows.append(torch.stack([torch.full_like(pose_ids, env_id), pose_ids], dim=1))
+        candidates = torch.cat(rows) if rows else torch.empty((0, 2), dtype=torch.long, device=self.device)
+        return candidates, exhausted
+
     def compute_env_info_gain_from_pose_idxs(
-        self, env_ids: torch.Tensor, closest_idxs: torch.Tensor, trial_data_dict: dict
-    ) -> torch.Tensor:
-        """Evaluate candidate poses per env without mutating global bin state and return best (env, pose) pairs."""
-        env_ids, closest_idxs_env = self._filter_pose_candidates(env_ids, closest_idxs, trial_data_dict)
-        if closest_idxs_env.numel() == 0:
-            return torch.empty((0, 2), dtype=torch.long, device=self.device)
+        self, env_ids: torch.Tensor, closest_idxs: torch.Tensor, return_scores: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        """
+        Score each env's candidate poses against its live bin counts and return the best (env_id, pose_id) pairs.
 
-        selected_envs = env_ids.tolist()
-        # print(f"selected envs: {selected_envs}")
-        pose_candidates_by_env = {f"env_{i}": closest_idxs_env[closest_idxs_env[:, 0] == i, 1] for i in selected_envs}
+        Only the candidate poses are read from disk (or the delta cache). Does not mutate live bin state.
+        Envs with no remaining candidates are omitted from the result.
 
-        # print(pose_candidates_by_env)
-        # print(f"pose candidataes by env: {pose_candidates_by_env}")
-        masked_dict = self._build_masked_dict(selected_envs, closest_idxs_env, trial_data_dict)
-        sensor_names = list(trial_data_dict["sensors"].keys())
+        :param return_scores: also return each returned pair's predicted score, shape (N,).
+        """
+        env_ids, candidates = self._filter_pose_candidates(env_ids, closest_idxs)
 
-        best_pose_by_env = []
-        for i in selected_envs:
-            env_key = f"env_{i}"
-            best_local_idx = self._select_best_pose_for_env(
-                env_key=env_key,
-                env_pose_candidates=pose_candidates_by_env[env_key],
-                env_sensor_data=masked_dict[env_key],
-                render_id_lut=self.h5_render_id_lut[env_key],
-                sensor_names=sensor_names,
-            )
-
-            if best_local_idx is None:
+        best_pose_by_env, best_scores = [], []
+        for i in env_ids.tolist():
+            pose_ids = torch.unique(candidates[candidates[:, 0] == i, 1]).cpu().numpy()
+            if pose_ids.size == 0:
                 continue
 
-            best_pose_by_env.append(
-                torch.stack(
-                    [
-                        torch.tensor(i, dtype=torch.long, device=self.device),
-                        pose_candidates_by_env[env_key][best_local_idx].to(dtype=torch.long),
-                    ]
-                )
-            )
+            env_key = f"env_{i}"
+            live_counts = self.binned_tree.bin_counts[env_key]
+            instance_weights = self.instance_semantic_weight[env_key]
+            scores = [
+                self.score_pose_delta(pose_delta, live_counts, instance_weights)
+                for pose_delta in self._get_pose_deltas(i, pose_ids)
+            ]
+            # argmax returns the first maximum, so ties go to the lowest pose id
+            best_local = int(np.argmax(scores))
+            best_pose_by_env.append((i, int(pose_ids[best_local])))
+            best_scores.append(scores[best_local])
 
-        if len(best_pose_by_env) == 0:
-            return torch.empty((0, 2), dtype=torch.long, device=self.device)
-
-        return torch.stack(best_pose_by_env, dim=0)
+        best = (
+            torch.tensor(best_pose_by_env, dtype=torch.long, device=self.device)
+            if best_pose_by_env
+            else torch.empty((0, 2), dtype=torch.long, device=self.device)
+        )
+        if return_scores:
+            return best, torch.tensor(best_scores, dtype=torch.float32, device=self.device)
+        return best
 
     def _compress_bin_updates(
         self, instance_idxs: torch.Tensor, length_bins: torch.Tensor, theta_bins: torch.Tensor
@@ -566,81 +612,66 @@ class NBVEvaluator:
             return torch_view
         raise TypeError(f"Expected a torch.Tensor or ProxyArray, got {type(value).__name__}")
 
-    def _prepare_sensor_batch(self, sensor_data: object) -> dict | None:
-        """Slice live CameraData tensors; do not recast Warp storage."""
-        id_to_labels = {}
-        if isinstance(sensor_data, dict) and "rgb" in sensor_data and "instance_segmentation" in sensor_data:
-            rgb = self._observation_torch(sensor_data["rgb"])
-            instance = self._observation_torch(sensor_data["instance_segmentation"])
-            valid = sensor_data.get("valid_mask")
-            valid = self._observation_torch(valid) if valid is not None else None
-            id_to_labels = sensor_data.get("id_to_labels") or {}
-        else:
-            output = getattr(sensor_data, "output", None)
-            info = getattr(sensor_data, "info", None)
-            if output is None or info is None:
-                return None
-            if "rgb" not in output or "instance_segmentation_fast" not in output:
-                return None
+    def _prepare_live_sensor_batch(self, sensor_name: str, sensor_data: object) -> dict | None:
+        """
+        Read one sensor's live CameraData for all envs and apply ``valid_pixel_mask``.
 
-            rgb = self._observation_torch(output["rgb"])
-            instance = self._observation_torch(output["instance_segmentation_fast"])
-            id_to_labels = _extract_id_to_labels(info)
-            valid = None
-            if "depth" in output:
-                depth = self._observation_torch(output["depth"]).squeeze(-1)
-                valid = torch.isfinite(depth) & (depth > 0)
+        Depth limits come from the capture file's sensor attrs (same rig); the orientation is ``quat_w_ros``.
+        Returns None if the sensor lacks the albedo output, instance segmentation, depth, or normals.
+        """
+        output = getattr(sensor_data, "output", None)
+        info = getattr(sensor_data, "info", None)
+        if output is None or info is None:
+            return None
+        if any(k not in output for k in (_UV_COLOR_KEY, "instance_segmentation", "depth", "normals")):
+            return None
 
-        if rgb.dim() == 3:
-            rgb = rgb.unsqueeze(0)
-        if instance.dim() == 4 and instance.shape[-1] == 1:
-            instance = instance.squeeze(-1)
-        if instance.dim() == 2:
-            instance = instance.unsqueeze(0)
-
-        if valid is None:
-            valid = torch.ones(instance.shape, dtype=torch.bool, device=self.device)
-        else:
-            if valid.dim() == 2:
-                valid = valid.unsqueeze(0)
-            valid = valid.to(device=self.device, dtype=torch.bool)
-
+        instance = self._observation_torch(output["instance_segmentation"])
+        depth = self._observation_torch(output["depth"])
+        instance = instance.squeeze(-1) if instance.dim() == 4 else instance
+        depth = depth.squeeze(-1) if depth.dim() == 4 else depth
+        attrs = self.sensor_attrs[sensor_name]
+        valid = valid_pixel_mask(
+            depth=depth,
+            normals=self._observation_torch(output["normals"])[..., :3],
+            sensor_quat=self._observation_torch(sensor_data.quat_w_ros),
+            z_near=attrs["z_near"],
+            z_far=attrs["z_far"],
+            max_incidence_deg=self.observation_config.max_incidence_angle,
+            convention="ros",
+        )
         return {
-            "rgb": rgb,
+            "uv_color": self._observation_torch(output[_UV_COLOR_KEY])[..., :3],
             "instance_segmentation": instance,
             "valid_mask": valid,
-            "id_to_labels": id_to_labels,
+            "id_to_labels": _extract_id_to_labels(info),
         }
 
-    def _slice_sensor_batch(self, sensor_batch: dict, env_idx: int) -> dict | None:
-        """Slice a prepared sensor batch to one environment. Does not convert Warp arrays."""
-        rgb = sensor_batch["rgb"]
-        instance = sensor_batch["instance_segmentation"]
-        valid = sensor_batch["valid_mask"]
-        if env_idx >= rgb.shape[0] or env_idx >= instance.shape[0] or env_idx >= valid.shape[0]:
-            return None
-        return {
-            "rgb": rgb[env_idx : env_idx + 1],
-            "instance_segmentation": instance[env_idx : env_idx + 1],
-            "valid_mask": valid[env_idx : env_idx + 1],
-            "id_to_labels": sensor_batch["id_to_labels"],
-        }
+    def _fresh_envs(self, sensor_name: str, frame: torch.Tensor | None) -> torch.Tensor | None:
+        """
+        Per-env bool mask of envs whose camera rendered a new frame since the last call; None means "all".
 
-    def _build_sensor_data_for_env(self, sensor_data: object, env_idx: int) -> dict | None:
-        """Build a normalized per-env sensor_data dictionary expected by the accumulator."""
-        sensor_batch = self._prepare_sensor_batch(sensor_data)
-        if sensor_batch is None:
+        Between renders (``update_period`` = 1 / data_rate_hz) ``sensor.data`` keeps returning the previous frame,
+        so binning every physics step would count each real frame several times.
+        """
+        if frame is None:
             return None
-        return self._slice_sensor_batch(sensor_batch, env_idx)
+        frame = self._observation_torch(frame).to(device=self.device).reshape(-1)
+        last = self._last_frames.get(sensor_name)
+        fresh = torch.ones_like(frame, dtype=torch.bool) if last is None else frame != last
+        self._last_frames[sensor_name] = frame.clone()
+        return fresh
 
     def update_bin_count_scores_from_observation(
-        self, env_ids: torch.Tensor, observations: dict
+        self, env_ids: torch.Tensor, observations: dict, frames: dict[str, torch.Tensor] | None = None
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor], dict[str, dict[str, torch.Tensor]]]:
         """
         Update live bin counts from a batch of observations.
 
         :param env_ids: Environment IDs for each observation row.
-        :param observations: Per-sensor observation batches keyed by sensor name.
+        :param observations: Per-sensor CameraData keyed by sensor name.
+        :param frames: Per-sensor ``Camera.frame`` (per-env render counters). Sensors/envs whose counter did not
+            advance since the previous call are skipped. None bins every observation (no rate limiting).
         :return: Tuple of (info_gains, dense_bin_updates_by_env, sparse_bin_updates_by_env).
         """
         if env_ids.numel() == 0:
@@ -654,8 +685,10 @@ class NBVEvaluator:
         sparse_bin_updates_by_env = {}
 
         prepared_sensors = {}
+        fresh_by_sensor = {}
         for sensor_name, sensor_data in observations.items():
-            prepared_sensors[sensor_name] = self._prepare_sensor_batch(sensor_data)
+            prepared_sensors[sensor_name] = self._prepare_live_sensor_batch(sensor_name, sensor_data)
+            fresh_by_sensor[sensor_name] = self._fresh_envs(sensor_name, None if frames is None else frames[sensor_name])
 
         for i in selected_envs:
             env_key = f"env_{i}"
@@ -671,9 +704,12 @@ class NBVEvaluator:
             for sensor_name, sensor_batch in prepared_sensors.items():
                 if sensor_batch is None:
                     continue
-                env_sensor_data = self._slice_sensor_batch(sensor_batch, i)
-                if env_sensor_data is None:
+                fresh = fresh_by_sensor[sensor_name]
+                if fresh is not None and not bool(fresh[i]):
                     continue
+                env_sensor_data = {
+                    k: (v if k == "id_to_labels" else v[i : i + 1]) for k, v in sensor_batch.items()
+                }
 
                 render_id_lut = self._build_render_id_lut(
                     env_idx=i, render_id_to_prim_path=env_sensor_data["id_to_labels"]
@@ -719,34 +755,7 @@ class NBVEvaluator:
 
 
 if __name__ == "__main__":
-
-    def h5_to_dict(node) -> dict:
-        """
-        Convert an h5py File/Group/Dataset object to a dictionary, preserving attrs.
-        """
-        if hasattr(node, "keys"):
-            result = {key: h5_to_dict(node[key]) for key in node.keys()}
-            attrs = {attr: node.attrs[attr] for attr in node.attrs}
-            if attrs:
-                result["attrs"] = attrs
-            return result
-        elif hasattr(node, "read_direct"):
-            value = node[()]
-            if isinstance(value, bytes):
-                value = value.decode("utf-8")
-            elif hasattr(value, "dtype") and value.dtype.kind == "S":
-                value = value.astype(str)
-            attrs = {attr: node.attrs[attr] for attr in node.attrs}
-            return {"data": value, "attrs": attrs} if attrs else value
-        else:
-            return node
-
-    test_h5_file = "/home/luke/IsaacLab/source/isaaclab-sensor-learning/data/data_collection/SL-PDC_20260810_145937.h5"
-
-    with h5.File(test_h5_file, "r") as f:
-        trial_dict = h5_to_dict(f)
-
-    num_envs = trial_dict["attrs"]["num_envs"]
+    import sys
 
     start_pose_w = torch.tensor(
         [
@@ -757,18 +766,14 @@ if __name__ == "__main__":
         device="cuda:0",
     )
 
-    coverage_evaluator = CoverageEvaluator(
-        n_envs=num_envs,
-        trial_data=trial_dict,
+    with NBVEvaluator(
+        trial_data_path=sys.argv[1],
+        n_envs=start_pose_w.shape[0],
         observation_config=ObservationConfig(),
         gain_config=GainConfig(),
-    )
-
-    closest_idxs = coverage_evaluator.get_closest_pose_idxs(curr_poses=start_pose_w)
-
-    compute_info_gain = coverage_evaluator.compute_env_info_gain_from_pose_idxs(
-        env_ids=torch.tensor([0, 1], device=coverage_evaluator.device),
-        closest_idxs=closest_idxs,
-        trial_data_dict=trial_dict,
-    )
-    print(compute_info_gain)
+    ) as nbv_evaluator:
+        closest_idxs = nbv_evaluator.get_closest_pose_idxs(curr_poses=start_pose_w)
+        best_poses = nbv_evaluator.compute_env_info_gain_from_pose_idxs(
+            env_ids=torch.arange(start_pose_w.shape[0], device=nbv_evaluator.device), closest_idxs=closest_idxs
+        )
+        print(best_poses)

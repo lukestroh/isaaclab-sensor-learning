@@ -3,7 +3,7 @@ from isaaclab.assets import AssetBaseCfg, ArticulationCfg, RigidObjectCfg, Rigid
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import CameraCfg
-from isaaclab.sim import SimulationCfg, RenderCfg, MultiUsdFileCfg, RigidBodyBaseCfg
+from isaaclab.sim import SimulationCfg, MultiUsdFileCfg, RigidBodyBaseCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 
@@ -31,7 +31,7 @@ class JointStateCollectionEnvCfg(DirectRLEnvCfg):
     sim: SimulationCfg = SimulationCfg(
         dt=physics_dt,
         render_interval=decimation,
-        render=RenderCfg(enable_global_illumination=True, antialiasing_mode="Off"),  # , physics=NewtonCfg()
+        # render=RenderCfg(enable_global_illumination=True, antialiasing_mode="Off"),  # , physics=NewtonCfg()
     )
 
     # scene

@@ -18,7 +18,7 @@ class GoalIKSolver:
         @param eef_pos_b: end-effector position in base frame of shape (B, 3)
         @param eef_quat_b: end-effector orientation in base frame of shape (B, 4)
         """
-        r_root = math_utils.mat_from_quat(root_quat)
+        r_root = math_utils.matrix_from_quat(root_quat)  # root_quat is (x, y, z, w)
         
 
         return

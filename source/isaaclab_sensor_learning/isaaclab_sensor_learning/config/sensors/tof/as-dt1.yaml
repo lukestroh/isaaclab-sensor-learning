@@ -1,0 +1,29 @@
+# https://aegis-elec.com/sony-as-dt1-lidar-depth-sensor.html
+model: "as-dt1"
+sensor_type: "tof"
+data_type: "depth"
+mass: 0.045 # kg
+dimensions:
+  shape: box
+  x: 0.029
+  y: 0.029
+  z: 0.031
+depth:
+  hfov: 35.5
+  vfov: 28.2
+  z_near: 0.05
+  z_far: 20.0
+  sensing_unit_offset:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+data_rate_hz: 30
+resolution: 0.0025 # m
+accuracy:
+  pm: 0.0050 # m
+  distance: 10 # m
+wavelength: 940 # nm
+cost: 1050.00 # USD

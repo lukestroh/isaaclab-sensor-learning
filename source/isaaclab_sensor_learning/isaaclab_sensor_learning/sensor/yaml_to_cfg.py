@@ -9,9 +9,9 @@ import os
 import numpy as np
 import yaml
 
-from isaaclab_sensor_learning import CFG_DIR
+from isaaclab_sensor_learning import CFG_DIR, RIG_DIR
 
-RIG_CFG_DIR = os.path.join(CFG_DIR, "rigs")
+RIG_CFG_DIR = RIG_DIR
 SENSOR_CFG_DIR = os.path.join(CFG_DIR, "sensors")
 
 SensorCfg = CameraCfg | MultiMeshRayCasterCameraCfg
@@ -156,7 +156,7 @@ def rig_yaml_to_sensor_cfgs(rig_yaml_path: Path) -> dict[str, SensorCfg]:
 
 
 def main():
-    rig_yaml_path = RIG_CFG_DIR / "rig0.yaml"
+    rig_yaml_path = os.path.join(RIG_CFG_DIR, "test_rig0.yaml")
     sensor_cfgs = rig_yaml_to_sensor_cfgs(rig_yaml_path)
     return
 

@@ -55,6 +55,4 @@ class PoseDataCaptureEnvCfg(DirectRLEnvCfg):
     )
 
     # rig
-    rig_yaml_path: str = (
-        Path(__file__).parent.parent.parent.parent / "config/rigs/test_rig0.yaml"
-    ).as_posix()  # NOTE: Standin for now, will be replaced by arguments from evolutionary outputs
+    rig_yaml_path: str = env_params.default_rig_yaml_path

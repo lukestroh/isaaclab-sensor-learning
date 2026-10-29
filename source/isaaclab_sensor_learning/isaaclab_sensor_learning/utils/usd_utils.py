@@ -24,12 +24,7 @@ def load_usd(
         prim_type="Xform",
         usd_path=usd_path,
         position=position,
-        orientation=(
-            orientation[3],
-            orientation[0],
-            orientation[1],
-            orientation[2],
-        ),  # convert from (x, y, z, w) to (w, x, y, z)
+        orientation=orientation,  # (x, y, z, w), as create_prim expects in Isaac Lab 3
         semantic_label=name,
     )
     return prim_path

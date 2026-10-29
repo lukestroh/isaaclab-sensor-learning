@@ -13,6 +13,8 @@ from isaaclab_sensor_learning.tasks.direct.isaaclab_sensor_learning.sensor_learn
 )
 
 
+
+
 @configclass
 class SensorLearningEnvCfg(DirectRLEnvCfg):
     """Configuration for the sensor learning environment."""
@@ -24,7 +26,6 @@ class SensorLearningEnvCfg(DirectRLEnvCfg):
     action_space = env_params.action_space
     observation_space = env_params.observation_space
     state_space = env_params.state_space
-    num_envs = env_params.num_envs
     physics_dt = env_params.physics_dt
 
     # simulation
@@ -35,8 +36,10 @@ class SensorLearningEnvCfg(DirectRLEnvCfg):
     )
 
     # scene
+    # scene.num_envs is the only env count (--num-envs / parse_env_cfg sets it); read it at runtime via
+    # env.num_envs, never from a separate cfg field, which would go stale when the count is overridden
     scene: SensorLearningSceneCfg = SensorLearningSceneCfg(
-        num_envs=num_envs,
+        num_envs=env_params.num_envs,
         lazy_sensor_update=False,  # Change to false for evaluation
         replicate_physics=False,
         env_spacing=5.0,
