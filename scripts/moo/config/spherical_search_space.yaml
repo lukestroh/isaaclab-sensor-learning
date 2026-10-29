@@ -1,13 +1,15 @@
+# NSGA-II search space for a spherical-cap mount platform. The genome is
+#   [radius_idx, colat_idx, n_sensors, model_0, ..., model_{max_total-1}]
+# Sensor sites come only from the Lloyd generator (spherical_sensor_layout_generator), given radius and colatitude.
+name: spherical_v1
 attachment:
   type: spherical
-  radius: [0.03, 0.5]
-  azimuth_deg: [0, 180]
-  polar_deg: [0, 180]
+  radii_m: [0.10, 0.15, 0.20, 0.25, 0.30]
+  colatitudes_deg: [10, 20, 30, 40, 50, 60]  # half-angle of the cap (platform shape), not a site coordinate
 sensors:
-  allowed: ['vl53l8cx',]
+  allowed: ['vl53l8cx',]  # only vl53l8cx while debugging; d780 (3840x2160) is excluded
   min_total: 1
-  max_total: 20
-constraints:
-  min_spacing: 0.02
-  tolerance: 1e-6
+  max_total: 20  # hard bound
+constraints:  # merged into the Lloyd layout dict by SensorLearningEnv and the rig codec
+  tolerance: 1.0e-6
   mesh_points: 8000
