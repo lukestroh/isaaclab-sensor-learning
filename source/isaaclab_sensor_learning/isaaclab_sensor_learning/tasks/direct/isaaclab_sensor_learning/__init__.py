@@ -10,6 +10,38 @@ from . import agents
 ##
 # Register Gym environments.
 ##
+gym.register(
+    id="Template-Convert-USD-Direct-v0",
+    entry_point=f"{__name__}.convert_usd_env:ConvertUSDEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.convert_usd_env_cfg:ConvertUSDEnvCfg",
+        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_amp_cfg.yaml",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
+    },
+)
+
+gym.register(
+    id="Template-View-USD-Direct-v0",
+    entry_point=f"{__name__}.view_usd_env:ViewUSDEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.view_usd_env_cfg:ViewUSDEnvCfg",
+        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_amp_cfg.yaml",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
+    },
+)
+
+gym.register(
+    id="Template-Joint-State-Collection-Direct-v0",
+    entry_point=f"{__name__}.joint_state_collection_env:JointStateCollectionEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.joint_state_collection_env_cfg:JointStateCollectionEnvCfg",
+        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_amp_cfg.yaml",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
+    },
+)
 
 gym.register(
     id="Template-Pose-Data-Capture-Direct-v0",
@@ -43,3 +75,4 @@ gym.register(
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
     },
 )
+

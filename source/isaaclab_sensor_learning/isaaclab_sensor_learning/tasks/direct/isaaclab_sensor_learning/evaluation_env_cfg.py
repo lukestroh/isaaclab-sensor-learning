@@ -1,58 +1,51 @@
 #!/usr/bin/env python3
-
-from isaaclab.assets import ArticulationCfg
-
-# from isaaclab.controllers.config.rmp_flow import FR3_RMPFLOW_CFG, FRANKA_RMPFLOW_CFG, UR10_RMPFLOW_CFG
+from isaaclab.assets import AssetBaseCfg, ArticulationCfg, RigidObjectCfg, RigidObjectCollectionCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sim import SimulationCfg, RenderCfg
+from isaaclab.sensors import CameraCfg
+from isaaclab.sim import SimulationCfg, RenderCfg, MultiUsdFileCfg, RigidBodyBaseCfg
+from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
-
-from isaaclab_sensor_learning.robot.franka_cfg import FRANKA_FR3_CFG
-
-# from isaaclab_sensor_learning.motion_planning.rmp_flow import FR3_RMPFLOW_CFG
-
-from isaaclab_assets.robots.franka import FRANKA_PANDA_CFG
 from isaaclab_assets.robots.universal_robots import UR10e_CFG
+from isaaclab_newton.physics import NewtonCfg
 
-# from pathlib import Path
+from isaaclab_sensor_learning.tasks.direct.isaaclab_sensor_learning import common_env_cfg_params as env_params
+from isaaclab_sensor_learning.tasks.direct.isaaclab_sensor_learning.sensor_learning_scene_cfg import (
+    SensorLearningSceneCfg,
+)
 
-# from isaaclab_assets import FRANKA_PANDA_HIGH_PD_CFG
+import glob
+import os
+from pathlib import Path
 
 
 @configclass
 class PoseEvaluationEnvCfg(DirectRLEnvCfg):
+    """Configuration for the pose evaluation environment."""
+
     # env
-    decimation = 2
-    episode_length_s = 60.0
+    decimation = env_params.decimation
+    episode_length_s = env_params.episode_length_s
     # - spaces definition
-    action_space = 1
-    observation_space = 4
-    state_space = 0
-    num_envs = 1
+    action_space = env_params.action_space
+    observation_space = env_params.observation_space
+    state_space = env_params.state_space
+    num_envs = env_params.num_envs
+    physics_dt = env_params.physics_dt
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 120, render_interval=decimation, render=RenderCfg(antialiasing_mode="Off")
+        dt=physics_dt,
+        render_interval=decimation,
+        render=RenderCfg(enable_global_illumination=True, antialiasing_mode="Off"),  # , physics=NewtonCfg()
     )
 
     # scene
-    scene = InteractiveSceneCfg(
+    scene: SensorLearningSceneCfg = SensorLearningSceneCfg(
         num_envs=num_envs,
-        lazy_sensor_update=True,  # Change to false for evaluation
-        replicate_physics=True,
-        env_spacing=2.0,
+        lazy_sensor_update=False,  # Change to false for evaluation
+        replicate_physics=False,
+        env_spacing=5.0,
     )
 
-    # robot
-    # robot_cfg: ArticulationCfg = FRANKA_FR3_CFG.copy().replace(prim_path="/World/envs/env_.*/robot")
-    # robot_cfg: ArticulationCfg = FRANKA_PANDA_HIGH_PD_CFG.copy().replace(prim_path="/World/envs/env_.*/robot")
-    robot_cfg: ArticulationCfg = UR10e_CFG.copy().replace(prim_path="/World/envs/env_.*/robot")
-
-    # rmp_flow_cfg = FR3_RMPFLOW_CFG
-
-    # sensors: NOTE: offsetconfigs for sensors are from the parent prim. this needs to be combined with internal sensor receiver offset defined in the sensor yaml.
-
-    rig_yaml_path: str = ""
-    # rig_yaml_path: str = "pose_data_capture/pose_data_capture/assets/rigs/rig0.yaml"
-    tree_usd_path: str = ""
+    rig_yaml_path: str = env_params.default_rig_yaml_path

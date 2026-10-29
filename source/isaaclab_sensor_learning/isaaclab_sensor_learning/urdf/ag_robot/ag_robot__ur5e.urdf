@@ -1,0 +1,341 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot name="ag_robot">
+    <link name="amiga__base" />
+    <link name="amiga__body">
+        <visual>
+            <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0" />
+            <geometry>
+            <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/amiga/frame_on_amiga_v2_simplified.stl" />
+            </geometry>
+            <material name="LightLightGrey" />
+        </visual>
+        <collision>
+            <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.499053035" />
+            <geometry>
+            <box size="1.132 0.8 0.99810607" />
+            </geometry>
+        </collision>
+        <collision>
+            <origin rpy="0.0 0.0 0.0" xyz="0.0 -0.12 0.99810607" />
+            <geometry>
+            <box size="1.132 0.6 0.2" />
+            </geometry>
+        </collision>
+        <collision>
+            <origin rpy="0.0 0.0 0.0" xyz="0.44099999999999995 0.08333333333333333 1.19810607" />
+            <geometry>
+            <box size="0.25 0.25 0.25" />
+            </geometry>
+        </collision>
+        <inertial>
+            <origin rpy="0 0 0" xyz="0.0 0.0 0.0" />
+            <mass value="40.0" />
+            <inertia ixx="5.454052423236149" ixy="0.0" ixz="0.0" iyy="7.592132423236148" iyz="0.0" izz="6.404746666666665" />
+        </inertial>
+    </link>
+    <link name="amiga__tool0" />
+    <joint name="amiga__base--amiga__body" type="fixed">
+        <origin rpy="0 0 0" xyz="0 0 0" />
+        <parent link="amiga__base" />
+        <child link="amiga__body" />
+    </joint>
+    <joint name="amiga__body--amiga__tool0" type="fixed">
+        <origin rpy="0.0 0.0 0.0" xyz="0.125 0.323256 1.09810607" />
+        <parent link="amiga__body" />
+        <child link="amiga__tool0" />
+    </joint>
+  <link name="linear_slider__base_link">
+    <visual>
+      <material name="alpha_black" />
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/linear_slider/7thlink_fixed.STL" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0.0 0.0 0.0" xyz="-0.07 0.0 0.0" />
+      <geometry>
+        <box size="1.35 0.3 0.10" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="20.0" />
+      <origin xyz="0.0 0.0 0.0" />
+      <inertia ixx="0.061" ixy="0.0" ixz="0.0" iyy="0.65" iyz="0.0" izz="0.661" />
+    </inertial>
+  </link>
+  <link name="linear_slider__moving_base">
+    <visual>
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0" />
+      <material name="red_v" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/linear_slider/7thlink_move.STL" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0.0 0.0 0.0" xyz="0.0 -0.025 0.0" />
+      <geometry>
+        <box size="0.22 0.220 0.118" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="10.0" />
+      <origin xyz="0.0 0.0 0.0" />
+      <inertia ixx="0.0915" ixy="0.0" ixz="0.0" iyy="0.975" iyz="0.0" izz="0.9915" />
+    </inertial>
+  </link>
+  <link name="linear_slider__tool0" />
+  <link name="linear_slider__base" />
+  <link name="linear_slider__flange" />
+  <joint name="linear_slider__base_joint" type="fixed">
+    <parent link="amiga__tool0" />
+    <child link="linear_slider__base" />
+    <origin rpy="0 0 0" xyz="0 0 0" />
+  </joint>
+  <joint name="linear_slider__base_link--base_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0" />
+    <parent link="linear_slider__base" />
+    <child link="linear_slider__base_link" />
+  </joint>
+  <joint name="linear_slider__joint1" type="prismatic">
+    <parent link="linear_slider__base_link" />
+    <child link="linear_slider__moving_base" />
+    <axis xyz="1 0 0" />
+    <limit effort="0.05" lower="-0.4" upper="0.4" velocity="0.08333333333333334" />
+    <origin rpy="0 0 0" xyz="0 0 0" />
+  </joint>
+  <joint name="linear_slider__moving_base--flange_joint" type="fixed">
+    <parent link="linear_slider__moving_base" />
+    <child link="linear_slider__flange" />
+    <origin rpy="0 0 0" xyz="0 0 0.05" />
+  </joint>
+  <joint name="linear_slider__flange--tool0_joint" type="fixed">
+    <parent link="linear_slider__flange" />
+    <child link="linear_slider__tool0" />
+    <origin rpy="0 0 0" xyz="0 0 0" />
+  </joint>
+  <link name="ur5e__base_link" />
+  <link name="ur5e__base_link_inertia">
+    <visual>
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/visual/base.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/collision/base.stl" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="4.0" />
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <inertia ixx="0.00443333156" ixy="0.0" ixz="0.0" iyy="0.00443333156" iyz="0.0" izz="0.0072" />
+    </inertial>
+  </link>
+  <link name="ur5e__shoulder_link">
+    <visual>
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/visual/shoulder.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/collision/shoulder.stl" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="3.761" />
+      <origin rpy="1.570796326794897 0 0" xyz="0.0 -0.00193 -0.02561" />
+      <inertia ixx="0.0070021" ixy="7.3e-07" ixz="-1.053e-05" iyy="0.00648091" iyz="0.00049994" izz="0.00657286" />
+    </inertial>
+  </link>
+  <link name="ur5e__upper_arm_link">
+    <visual>
+      <origin rpy="1.5707963267948966 0 -1.5707963267948966" xyz="0 0 0.138" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/visual/upperarm.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="1.5707963267948966 0 -1.5707963267948966" xyz="0 0 0.138" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/collision/upperarm.stl" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="8.058" />
+      <origin rpy="0 0 0" xyz="-0.2125 0.0 0.11336" />
+      <inertia ixx="0.01505885" ixy="-5.4e-05" ixz="5.63e-06" iyy="0.33388086" iyz="-1.81e-06" izz="0.33247207" />
+    </inertial>
+  </link>
+  <link name="ur5e__forearm_link">
+    <visual>
+      <origin rpy="1.5707963267948966 0 -1.5707963267948966" xyz="0 0 0.007" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/visual/forearm.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="1.5707963267948966 0 -1.5707963267948966" xyz="0 0 0.007" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/collision/forearm.stl" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="2.846" />
+      <origin rpy="0 0 0" xyz="-0.2422 0.0 0.0265" />
+      <inertia ixx="0.00399632" ixy="-1.365e-05" ixz="0.00137272" iyy="0.07879254" iyz="-6.6e-06" izz="0.0784851" />
+    </inertial>
+  </link>
+  <link name="ur5e__wrist_1_link">
+    <visual>
+      <origin rpy="1.5707963267948966 0 0" xyz="0 0 -0.127" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/visual/wrist1.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="1.5707963267948966 0 0" xyz="0 0 -0.127" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/collision/wrist1.stl" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1.37" />
+      <origin rpy="1.570796326794897 0 0" xyz="0.0 -0.01634 -0.0018" />
+      <inertia ixx="0.00165491" ixy="-2.82e-06" ixz="-4.38e-06" iyy="0.00135962" iyz="0.00010157" izz="0.00126279" />
+    </inertial>
+  </link>
+  <link name="ur5e__wrist_2_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.0997" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/visual/wrist2.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.0997" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/collision/wrist2.stl" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1.3" />
+      <origin rpy="-1.570796326794897 0 0" xyz="0.0 0.01634 -0.0018" />
+      <inertia ixx="0.00135617" ixy="-2.74e-06" ixz="4.44e-06" iyy="0.00127827" iyz="-5.048e-05" izz="0.00096614" />
+    </inertial>
+  </link>
+  <link name="ur5e__wrist_3_link">
+    <visual>
+      <origin rpy="1.5707963267948966 0 0" xyz="0 0 -0.0989" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/visual/wrist3.dae" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="1.5707963267948966 0 0" xyz="0 0 -0.0989" />
+      <geometry>
+        <mesh filename="file:///home/luke/IsaacLab/source/isaaclab-sensor-learning/source/isaaclab_sensor_learning/isaaclab_sensor_learning/meshes/universal_robots/ur5e/collision/wrist3.stl" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.365" />
+      <origin rpy="0 0 0" xyz="0.0 0.0 -0.001159" />
+      <inertia ixx="0.00018694" ixy="6e-08" ixz="-1.7e-07" iyy="0.00018908" iyz="-9.2e-07" izz="0.00025756" />
+    </inertial>
+  </link>
+  <joint name="ur5e__base_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0" />
+    <parent link="linear_slider__tool0" />
+    <child link="ur5e__base_link" />
+  </joint>
+  <joint name="ur5e__base_link-base_link_inertia" type="fixed">
+    <parent link="ur5e__base_link" />
+    <child link="ur5e__base_link_inertia" />
+    <origin rpy="0 0 3.141592653589793" xyz="0 0 0" />
+  </joint>
+  <joint name="ur5e__shoulder_pan_joint" type="revolute">
+    <parent link="ur5e__base_link_inertia" />
+    <child link="ur5e__shoulder_link" />
+    <origin rpy="0 0 0" xyz="0 0 0.1625" />
+    <axis xyz="0 0 1" />
+    <limit effort="150.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="3.141592653589793" />
+    <dynamics damping="0" friction="0" />
+  </joint>
+  <joint name="ur5e__shoulder_lift_joint" type="revolute">
+    <parent link="ur5e__shoulder_link" />
+    <child link="ur5e__upper_arm_link" />
+    <origin rpy="1.570796327 0 0" xyz="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit effort="150.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="3.141592653589793" />
+    <dynamics damping="0" friction="0" />
+  </joint>
+  <joint name="ur5e__elbow_joint" type="revolute">
+    <parent link="ur5e__upper_arm_link" />
+    <child link="ur5e__forearm_link" />
+    <origin rpy="0 0 0" xyz="-0.425 0 0" />
+    <axis xyz="0 0 1" />
+    <limit effort="150.0" lower="-3.141592653589793" upper="3.141592653589793" velocity="3.141592653589793" />
+    <dynamics damping="0" friction="0" />
+  </joint>
+  <joint name="ur5e__wrist_1_joint" type="revolute">
+    <parent link="ur5e__forearm_link" />
+    <child link="ur5e__wrist_1_link" />
+    <origin rpy="0 0 0" xyz="-0.3922 0 0.1333" />
+    <axis xyz="0 0 1" />
+    <limit effort="28.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="3.141592653589793" />
+    <dynamics damping="0" friction="0" />
+  </joint>
+  <joint name="ur5e__wrist_2_joint" type="revolute">
+    <parent link="ur5e__wrist_1_link" />
+    <child link="ur5e__wrist_2_link" />
+    <origin rpy="1.570796327 0 0" xyz="0 -0.0997 -2.044881182297852e-11" />
+    <axis xyz="0 0 1" />
+    <limit effort="28.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="3.141592653589793" />
+    <dynamics damping="0" friction="0" />
+  </joint>
+  <joint name="ur5e__wrist_3_joint" type="revolute">
+    <parent link="ur5e__wrist_2_link" />
+    <child link="ur5e__wrist_3_link" />
+    <origin rpy="1.570796326589793 3.141592653589793 3.141592653589793" xyz="0 0.0996 -2.042830148012698e-11" />
+    <axis xyz="0 0 1" />
+    <limit effort="28.0" lower="-6.283185307179586" upper="6.283185307179586" velocity="3.141592653589793" />
+    <dynamics damping="0" friction="0" />
+  </joint>
+  <link name="ur5e__ft_frame" />
+  <joint name="ur5e__wrist_3_link-ft_frame" type="fixed">
+    <parent link="ur5e__wrist_3_link" />
+    <child link="ur5e__ft_frame" />
+    <origin rpy="3.141592653589793 0 0" xyz="0 0 0" />
+  </joint>
+  <link name="ur5e__base" />
+  <joint name="ur5e__base_link-base_fixed_joint" type="fixed">
+    <origin rpy="0 0 3.141592653589793" xyz="0 0 0" />
+    <parent link="ur5e__base_link" />
+    <child link="ur5e__base" />
+  </joint>
+  <link name="ur5e__flange" />
+  <joint name="ur5e__wrist_3-flange" type="fixed">
+    <parent link="ur5e__wrist_3_link" />
+    <child link="ur5e__flange" />
+    <origin rpy="0 -1.5707963267948966 -1.5707963267948966" xyz="0 0 0" />
+  </joint>
+  <link name="ur5e__tool0" />
+  <joint name="ur5e__flange-tool0" type="fixed">
+    <origin rpy="1.5707963267948966 0 1.5707963267948966" xyz="0 0 0" />
+    <parent link="ur5e__flange" />
+    <child link="ur5e__tool0" />
+  </joint>
+  <material name="alpha_black">
+    <color rgba="0.6 0.6 0.6 1" />
+  </material>
+  <material name="red_v">
+    <color rgba="1 0 0 1" />
+  </material>
+
+
+</robot>

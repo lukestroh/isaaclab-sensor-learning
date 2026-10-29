@@ -21,5 +21,4 @@ depth:
     pitch: 0.0
     yaw: 0.0
 data_rate_hz: 15
-upsample: True # upsample the image to deal with low-resolution and avoid color smearing from render.
-upsample_factor: 30.5
+cost: 24.95 # USD

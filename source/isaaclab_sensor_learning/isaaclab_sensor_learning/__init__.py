@@ -24,3 +24,19 @@ USD_DIR = os.path.join(PKG_DIR, "usd")
 URDF_DIR = os.path.join(PKG_DIR, "urdf")
 
 TREES_DIR = os.path.join(PKG_DIR, "trees")
+
+DATA_DIR = os.path.join(PKG_DIR, "../../../data")
+
+RIG_DIR = os.path.join(DATA_DIR, "rigs")  # rigs change often; kept out of the package config
+
+SCRIPTS_DIR = os.path.join( PKG_DIR, "../../../scripts")
+
+
+
+def main():
+    print(os.path.exists(DATA_DIR))
+    return
+
+
+if __name__ == "__main__":
+    main()

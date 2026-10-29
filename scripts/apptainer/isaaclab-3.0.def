@@ -1,0 +1,24 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%labels
+    Version isaaclab3.0
+    MyLabel isaaclab
+
+%post
+    apt-get update && apt-get install -y wget curl gnupg lsb-release software-properties-common cmake build-essential git
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    . root/.local/bin/env
+    git clone https://github.com/isaac-sim/IsaacLab.git --branch release/3.0.0
+    cd IsaacLab
+    uv venv --python 3.12 --seed venv
+    . venv/bin/activate
+    uv pip install -U torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu130
+    uv pip install plotly
+    ./isaaclab.sh --install 'newton,rl[rsl-rl],visualizer[newton]'
+
+%environment
+
+%runscript
+    exec "$@"
+

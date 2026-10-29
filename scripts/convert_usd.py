@@ -8,7 +8,7 @@ parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default="Template-Pose-Evaluation-Direct-v0", help="Name of the task.")
+parser.add_argument("--task", type=str, default="Template-Convert-USD-Direct-v0", help="Name of the task.")
 # parser.add_argument("--enable_cameras", action="store_true", default=True, help="Enable cameras in the environment.")
 
 # append AppLauncher cli args
@@ -29,7 +29,9 @@ from isaaclab_tasks.utils import parse_env_cfg
 import isaaclab_sensor_learning.tasks  # noqa: F401
 from isaaclab_sensor_learning.utils import usd_utils
 
+
 import os
+import pprint as pp
 
 
 def main():
@@ -42,19 +44,14 @@ def main():
     # reset environment
     env.reset()
 
-    usd_converter = usd_utils.generate_usd_from_urdf(
-        urdf_path=os.path.join(usd_utils.URDF_DIR, "fr3/fr3.urdf"),
-        output_usd_dir=usd_utils.USD_DIR,
-    )
-
-    # should also call curobo's yaml generator?
-
-    # count = 0
     # # simulate environment
     while simulation_app.is_running():
         with torch.inference_mode():
 
-            break
+            ...
+
+    # close the simulator
+    env.close()
 
     return
 

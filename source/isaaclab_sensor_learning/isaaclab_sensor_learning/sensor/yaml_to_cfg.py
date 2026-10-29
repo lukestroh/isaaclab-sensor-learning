@@ -3,30 +3,33 @@ from isaaclab.sensors import CameraCfg, MultiMeshRayCasterCameraCfg, OffsetCfg
 from isaaclab.sim.spawners.sensors import PinholeCameraCfg
 from pathlib import Path
 from isaaclab_sensor_learning.sensor import camera_utils, lidar_utils, rig_utils
-from isaaclab_sensor_learning.utils import quaternion_utils as qutils
 from scipy.spatial.transform import Rotation as R
 
 import os
 import numpy as np
 import yaml
 
-from isaaclab_sensor_learning import CFG_DIR
-RIG_CFG_DIR = os.path.join(CFG_DIR, "rigs")
+from isaaclab_sensor_learning import CFG_DIR, RIG_DIR
+
+RIG_CFG_DIR = RIG_DIR
 SENSOR_CFG_DIR = os.path.join(CFG_DIR, "sensors")
 
 SensorCfg = CameraCfg | MultiMeshRayCasterCameraCfg
 
 
-def load_rig_yaml(rig_yaml_path: Path) -> dict:
-    """Load the rig yaml file."""
-    with open(rig_yaml_path, "r") as f:
-        rig_cfg = yaml.safe_load(f)
-    return rig_cfg
+
+def load_yaml(yaml_path: Path) -> dict:
+    """Load the yaml file."""
+    with open(yaml_path, "r") as f:
+        cfg = yaml.safe_load(f)
+    return cfg
 
 
 def load_sensor_yaml(sensor_rig_data: dict) -> dict:
     # print(sensor_rig_data)
-    sensor_metadata_path = os.path.join(SENSOR_CFG_DIR, sensor_rig_data["sensor_type"], f"{sensor_rig_data['model']}.yaml")
+    sensor_metadata_path = os.path.join(
+        SENSOR_CFG_DIR, sensor_rig_data["sensor_type"], f"{sensor_rig_data['model']}.yaml"
+    )
     with open(sensor_metadata_path, "r") as f:
         sensor_metadata = yaml.safe_load(f)
     return sensor_metadata
@@ -53,7 +56,7 @@ def rig_dict_to_sensor_cfgs(rig_dict: dict) -> dict[str, SensorCfg]:
     sensor_cfgs = {}
     # sensor_groups = group_sensors_by_type(rig_dict)
     # print(f"[INFO]: Sensor groups: {sensor_groups}")
-    
+
     # for sensor_rig_data in rig_dict["sensors"]:
     #     name = sensor_rig_data["name"]
     #     sensor_metadata = load_sensor_yaml(sensor_rig_data)
@@ -69,7 +72,7 @@ def rig_dict_to_sensor_cfgs(rig_dict: dict) -> dict[str, SensorCfg]:
 
     # #
     # for name, sensor_metadata in sensor_metadatas.items():
-        
+
     #     ##########################################################
     #     # Camera config
     #     ##########################################################
@@ -134,7 +137,7 @@ def rig_dict_to_sensor_cfgs(rig_dict: dict) -> dict[str, SensorCfg]:
     #                 debug_vis=True,
     #             ),
     #         }
-            
+
     #     ##########################################################
     #     # LiDAR config
     #     ##########################################################
@@ -153,7 +156,7 @@ def rig_yaml_to_sensor_cfgs(rig_yaml_path: Path) -> dict[str, SensorCfg]:
 
 
 def main():
-    rig_yaml_path = RIG_CFG_DIR / "rig0.yaml"
+    rig_yaml_path = os.path.join(RIG_CFG_DIR, "test_rig0.yaml")
     sensor_cfgs = rig_yaml_to_sensor_cfgs(rig_yaml_path)
     return
 

@@ -6,7 +6,6 @@ import numpy as np
 from typing import Any
 
 
-
 def _quaternion_from_two_vectors(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Compute the quaternion that rotates unit vector `a` onto unit vector `b`.
 
@@ -77,7 +76,7 @@ def _sample_cap_mesh(colatitude_max: float, radius: float, m_points: int) -> np.
 
 
 @dataclass
-class LloydSphereSensorLayout():
+class LloydSphereSensorLayout:
     """Generates a sensor layout over a spherical cap using Lloyd's algorithm
     (centroidal Voronoi tessellation) with a fixed pole sensor.
 
@@ -101,6 +100,7 @@ class LloydSphereSensorLayout():
         tol:         Convergence tolerance as a fraction of radius (default 1e-6).
         mesh_points: Number of mesh points for Voronoi discretisation (default 8000).
     """
+
     sensors: list[dict]
     n_sensors: int
     radius: float

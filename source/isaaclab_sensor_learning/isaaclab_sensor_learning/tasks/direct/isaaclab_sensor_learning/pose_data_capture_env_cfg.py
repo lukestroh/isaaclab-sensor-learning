@@ -2,56 +2,57 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
-from isaaclab.assets import AssetBaseCfg, ArticulationCfg, RigidObjectCfg
-from isaaclab.envs import DirectRLEnvCfg
-from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sim import SimulationCfg, RenderCfg, MultiUsdFileCfg, SpawnerCfg, RigidBodyPropertiesCfg
-from isaaclab.utils import configclass
-
-from isaaclab_assets.robots.universal_robots import UR10e_CFG
-
-
-from isaaclab_sensor_learning import USD_DIR, TREES_DIR
+#
 import glob
 import os
 from pathlib import Path
 
+from isaaclab.assets import AssetBaseCfg, ArticulationCfg, RigidObjectCfg, RigidObjectCollectionCfg
+from isaaclab.envs import DirectRLEnvCfg
+from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.sensors import CameraCfg
+from isaaclab.sim import SimulationCfg, RenderCfg, MultiUsdFileCfg, RigidBodyBaseCfg
+from isaaclab.terrains import TerrainImporterCfg
+from isaaclab.utils import configclass
+from isaaclab_newton.physics import NewtonCfg
+
+from isaaclab_sensor_learning import USD_DIR, URDF_DIR, TREES_DIR
+from isaaclab_sensor_learning.articulations.ag_robot import AG_ROBOT_UR10e_CFG, AG_ROBOT_UR5e_CFG
+from isaaclab_sensor_learning.sensor.generate_rig import RigGenerator
+from isaaclab_sensor_learning.tasks.direct.isaaclab_sensor_learning import common_env_cfg_params as env_params
+from isaaclab_sensor_learning.tasks.direct.isaaclab_sensor_learning.sensor_learning_scene_cfg import (
+    SensorLearningSceneCfg,
+)
+
 
 @configclass
 class PoseDataCaptureEnvCfg(DirectRLEnvCfg):
+    """Configuration for the pose data capture environment."""
+
     # env
-    decimation = 2
-    episode_length_s = 60.0
+    decimation = env_params.decimation
+    episode_length_s = env_params.episode_length_s
     # - spaces definition
-    action_space = 7
-    observation_space = 4
-    state_space = 0
-    num_envs = 1
+    action_space = env_params.action_space
+    observation_space = env_params.observation_space
+    state_space = env_params.state_space
+    num_envs = env_params.num_envs
+    physics_dt = env_params.physics_dt
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 120, render_interval=decimation, render=RenderCfg(antialiasing_mode="Off")
+        dt=physics_dt,
+        render_interval=decimation,
+        render=RenderCfg(enable_global_illumination=True, antialiasing_mode="Off"),  # , physics=NewtonCfg()
     )
 
     # scene
-    scene = InteractiveSceneCfg(
+    scene: SensorLearningSceneCfg = SensorLearningSceneCfg(
         num_envs=num_envs,
-        lazy_sensor_update=False,  # Change to false for evaluation
-        replicate_physics=True,
+        lazy_sensor_update=True,  # Change to false for evaluation
+        replicate_physics=False,
         env_spacing=5.0,
     )
 
-    # trees
-    trees_collection_cfg = MultiUsdFileCfg(
-        usd_path=glob.glob(os.path.join(TREES_DIR, "models", "*_uv.usda")),
-        random_choice=False,
-    )
-
-    # robot
-    robot_cfg: ArticulationCfg = UR10e_CFG.copy().replace(prim_path="/World/envs/env_.*/robot")
-
-    rig_yaml_path: str = (
-        Path(__file__).parent.parent.parent.parent / "config/rigs/test_rig0.yaml"
-    )  # NOTE: Standin for now, will be replaced by arguments from evolutionary outputs
-    # rig_yaml_path: str = "pose_data_capture/pose_data_capture/assets/rigs/rig0.yaml"
+    # rig
+    rig_yaml_path: str = env_params.default_rig_yaml_path
